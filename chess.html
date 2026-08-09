@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Chess</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --panel: #1e293b;
+    --text: #f1f5f9;
+    --muted: #94a3b8;
+    --light-sq: #f0d9b5;
+    --dark-sq: #b58863;
+    --accent: #fbbf24;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
+  }
+  body {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    height: 100vh;
+    height: 100dvh;
+    padding: max(10px, env(safe-area-inset-top))
+             max(10px, env(safe-area-inset-right))
+             max(10px, env(safe-area-inset-bottom))
+             max(10px, env(safe-area-inset-left));
+  }
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: min(94vmin, 560px);
+    gap: 10px;
+  }
+  header a { color: var(--muted); text-decoration: none; font-size: 14px; white-space: nowrap; }
+  #status { font-size: 15px; font-weight: 600; text-align: right; min-height: 1.2em; }
+  #wrap { position: relative; }
+  #board {
+    position: relative;
+    width: min(94vmin, 560px);
+    aspect-ratio: 1;
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    grid-template-rows: repeat(8, 1fr);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  }
+  .fly {
+    position: absolute;
+    z-index: 4;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    font-size: calc(min(94vmin, 560px) / 8 * 0.74);
+    line-height: 1;
+    transition: transform 0.18s ease;
+    will-change: transform;
+  }
+  .sq {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: calc(min(94vmin, 560px) / 8 * 0.74);
+    line-height: 1;
+    cursor: pointer;
+  }
+  .sq.light { background: var(--light-sq); }
+  .sq.dark { background: var(--dark-sq); }
+  .sq.last { box-shadow: inset 0 0 0 100vmax rgba(251, 191, 36, 0.28); }
+  .sq.sel { box-shadow: inset 0 0 0 100vmax rgba(59, 130, 246, 0.4); }
+  .sq.chk { box-shadow: inset 0 0 0 100vmax rgba(239, 68, 68, 0.45); }
+  .sq.dot::after {
+    content: "";
+    position: absolute;
+    width: 30%;
+    height: 30%;
+    border-radius: 50%;
+    background: rgba(15, 23, 42, 0.35);
+  }
+  .sq.cap::after {
+    content: "";
+    position: absolute;
+    inset: 6%;
+    border-radius: 50%;
+    border: calc(min(94vmin, 560px) / 8 * 0.09) solid rgba(15, 23, 42, 0.35);
+  }
+  .pc.w { color: #fafafa; text-shadow: 0 1px 2px rgba(0,0,0,0.9), 0 0 1px #000; }
+  .pc.b { color: #1c1c1c; text-shadow: 0 1px 1px rgba(255,255,255,0.25); }
+  #controls { display: flex; gap: 10px; width: min(94vmin, 560px); }
+  button {
+    flex: 1;
+    padding: 12px;
+    border: 2px solid rgba(255, 255, 255, 0.14);
+    border-radius: 12px;
+    background: var(--panel);
+    color: var(--text);
+    font: 700 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  button:active { background: #34405f; }
+  button:disabled { opacity: 0.4; }
+  #overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    background: rgba(10, 12, 26, 0.88);
+    -webkit-backdrop-filter: blur(5px);
+    backdrop-filter: blur(5px);
+    border-radius: 8px;
+    padding: 20px;
+    text-align: center;
+    z-index: 5;
+  }
+  #overlay.hidden { display: none; }
+  #overlay h1 { font-size: 30px; font-weight: 800; }
+  #overlay .row { display: flex; gap: 10px; width: 100%; max-width: 320px; }
+  #overlay .row button.on { border-color: var(--accent); background: #3a3320; }
+  #overlay label { color: var(--muted); font-size: 14px; }
+  #overlay input[type=range] { width: 100%; max-width: 320px; }
+  #elo-label { font-size: 20px; font-weight: 800; color: var(--accent); }
+  #ov-msg { color: var(--muted); font-size: 15px; line-height: 1.5; }
+  #promo { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; gap: 10px; background: rgba(10,12,26,0.8); z-index: 6; border-radius: 8px; }
+  #promo.show { display: flex; }
+  #promo button { flex: 0 0 auto; width: 72px; height: 72px; font-size: 44px; line-height: 1; }
+</style>
+</head>
+<body>
+  <header>
+    <a href="index.html">← Games</a>
+    <div id="status"></div>
+  </header>
+  <div id="wrap">
+    <div id="board"></div>
+    <div id="promo"></div>
+    <div id="overlay">
+      <h1>♞ Chess</h1>
+      <div id="ov-msg">Play against Stockfish 18, right in your browser.</div>
+      <div class="row">
+        <button id="side-w" class="on">Play White ♔</button>
+        <button id="side-b">Play Black ♚</button>
+      </div>
+      <label for="elo">Engine strength</label>
+      <input type="range" id="elo" min="600" max="2850" step="25" value="1200">
+      <div id="elo-label"></div>
+      <button id="start" style="max-width:320px; width:100%">Start Game</button>
+    </div>
+  </div>
+  <div id="controls">
+    <button id="btn-new">New Game</button>
+    <button id="btn-undo" disabled>Undo</button>
+  </div>
+
+<script type="module">
+  import { Chess } from "./lib/chess-1.4.0.mjs";
+
+  const boardEl = document.getElementById("board");
+  const statusEl = document.getElementById("status");
+  const overlay = document.getElementById("overlay");
+  const ovMsg = document.getElementById("ov-msg");
+  const promoEl = document.getElementById("promo");
+  const eloSlider = document.getElementById("elo");
+  const eloLabel = document.getElementById("elo-label");
+  const sideW = document.getElementById("side-w");
+  const sideB = document.getElementById("side-b");
+  const btnNew = document.getElementById("btn-new");
+  const btnUndo = document.getElementById("btn-undo");
+
+  const GLYPH = { k: "♚", q: "♛", r: "♜", b: "♝", n: "♞", p: "♟" };
+  const FILES = "abcdefgh";
+
+  // ---------- Preferences ----------
+  let prefs = { elo: 1200, side: "w" };
+  try {
+    const saved = JSON.parse(localStorage.getItem("chess-prefs"));
+    if (saved && typeof saved.elo === "number") prefs = saved;
+  } catch (e) { /* private browsing */ }
+  function savePrefs() {
+    try { localStorage.setItem("chess-prefs", JSON.stringify(prefs)); } catch (e) { /* private browsing */ }
+  }
+
+  // ---------- Audio (tiny WebAudio synth; unlocked on first user gesture) ----------
+  let AC = null;
+  function ensureAudio() {
+    try {
+      if (!AC) AC = new (window.AudioContext || window.webkitAudioContext)();
+      if (AC.state === "suspended") AC.resume();
+    } catch (e) { AC = null; }
+  }
+  function beep(f, f2, dur, type, vol, when) {
+    if (!AC) return;
+    try {
+      const t0 = AC.currentTime + (when || 0);
+      const o = AC.createOscillator(), g = AC.createGain();
+      o.type = type;
+      o.frequency.setValueAtTime(f, t0);
+      if (f2) o.frequency.exponentialRampToValueAtTime(f2, t0 + dur);
+      g.gain.setValueAtTime(vol, t0);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      o.connect(g).connect(AC.destination);
+      o.start(t0);
+      o.stop(t0 + dur + 0.05);
+    } catch (e) { /* audio is best-effort */ }
+  }
+  function thud(dur, vol) {
+    if (!AC) return;
+    try {
+      const n = Math.floor(AC.sampleRate * dur);
+      const buf = AC.createBuffer(1, n, AC.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+      const src = AC.createBufferSource(), g = AC.createGain();
+      src.buffer = buf;
+      g.gain.value = vol;
+      src.connect(g).connect(AC.destination);
+      src.start();
+    } catch (e) { /* audio is best-effort */ }
+  }
+  const sfx = {
+    land:    () => { thud(0.025, 0.12); beep(190, 140, 0.06, "sine", 0.3); },
+    capture: () => { thud(0.06, 0.22); beep(130, 70, 0.1, "square", 0.16); },
+    promote: () => { beep(523, null, 0.12, "triangle", 0.2); beep(659, null, 0.12, "triangle", 0.2, 0.09); beep(784, null, 0.22, "triangle", 0.22, 0.18); },
+  };
+
+  // ---------- Engine (Stockfish 18 lite, single-threaded WASM) ----------
+  let engine = null;
+  let engineOk = false;
+  const waiters = [];
+  function expect(pred) {
+    return new Promise((res) => waiters.push({ pred, res }));
+  }
+  function initEngine() {
+    try {
+      engine = new Worker("engines/stockfish-18-lite-single.js");
+    } catch (e) {
+      statusEl.textContent = "Engine failed to load";
+      ovMsg.textContent = "Couldn't start the engine. Serve this folder over HTTP (python3 -m http.server) — workers don't run from file:// URLs.";
+      return;
+    }
+    engine.onmessage = (e) => {
+      const line = String(e.data);
+      for (let i = 0; i < waiters.length; i++) {
+        if (waiters[i].pred(line)) { waiters.splice(i, 1)[0].res(line); return; }
+      }
+    };
+    engine.onerror = () => {
+      engineOk = false;
+      statusEl.textContent = "Engine error";
+      ovMsg.textContent = "The engine crashed or failed to load its .wasm file. Serve this folder over HTTP and check engines/ is present.";
+      overlay.classList.remove("hidden");
+    };
+    engine.postMessage("uci");
+    expect((l) => l === "uciok").then(() => { engineOk = true; });
+  }
+  initEngine();
+
+  async function configureEngine(elo) {
+    // Stockfish's calibrated Elo floor is 1320; below that, fall back to Skill Level
+    if (elo >= 1320) {
+      engine.postMessage("setoption name UCI_LimitStrength value true");
+      engine.postMessage("setoption name UCI_Elo value " + elo);
+    } else {
+      engine.postMessage("setoption name UCI_LimitStrength value false");
+      const skill = Math.max(0, Math.min(7, Math.floor((elo - 600) / 100)));
+      engine.postMessage("setoption name Skill Level value " + skill);
+    }
+    engine.postMessage("ucinewgame");
+    engine.postMessage("isready");
+    await expect((l) => l === "readyok");
+  }
+
+  function moveTimeMs(elo) {
+    return Math.round(150 + ((elo - 600) / 2250) * 850); // 150ms weak -> 1000ms strong
+  }
+
+  // ---------- Game state ----------
+  let game = new Chess();
+  let uciMoves = [];
+  let playerSide = "w";
+  let selected = null;      // square like "e2"
+  let legalTargets = [];    // verbose moves for the selected piece
+  let lastMove = null;      // {from, to}
+  let thinking = false;
+  let animating = false;
+  let gameOver = false;
+
+  // ---------- Board rendering ----------
+  const squares = {};
+  function buildBoard() {
+    boardEl.innerHTML = "";
+    const flip = playerSide === "b";
+    for (let row = 0; row < 8; row++) {
+      for (let col = 0; col < 8; col++) {
+        const r = flip ? 7 - row : row;       // 0 = rank 8
+        const c = flip ? 7 - col : col;
+        const sq = FILES[c] + (8 - r);
+        const div = document.createElement("div");
+        div.className = "sq " + ((r + c) % 2 === 0 ? "light" : "dark");
+        div.dataset.sq = sq;
+        div.addEventListener("pointerdown", (e) => { e.preventDefault(); onSquareTap(sq); });
+        boardEl.appendChild(div);
+        squares[sq] = div;
+      }
+    }
+    render();
+  }
+
+  function render() {
+    const pos = {};
+    for (const row of game.board()) {
+      for (const cell of row) {
+        if (cell) pos[cell.square] = cell;
+      }
+    }
+    let checkSq = null;
+    if (game.inCheck()) {
+      for (const [sq, cell] of Object.entries(pos)) {
+        if (cell.type === "k" && cell.color === game.turn()) checkSq = sq;
+      }
+    }
+    for (const [sq, div] of Object.entries(squares)) {
+      const cell = pos[sq];
+      div.innerHTML = cell
+        ? `<span class="pc ${cell.color}">${GLYPH[cell.type]}︎</span>`
+        : "";
+      div.classList.toggle("sel", sq === selected);
+      div.classList.toggle("last", !!lastMove && (sq === lastMove.from || sq === lastMove.to));
+      div.classList.toggle("chk", sq === checkSq);
+      const target = legalTargets.find((m) => m.to === sq);
+      div.classList.toggle("dot", !!target && !pos[sq]);
+      div.classList.toggle("cap", !!target && !!pos[sq]);
+    }
+    btnUndo.disabled = thinking || animating || gameOver || game.turn() !== playerSide || uciMoves.length < 2;
+  }
+
+  function setStatus(text) { statusEl.textContent = text; }
+
+  // ---------- Player input ----------
+  function onSquareTap(sq) {
+    ensureAudio();
+    if (thinking || animating || gameOver || !overlay.classList.contains("hidden")) return;
+    if (game.turn() !== playerSide) return;
+
+    const target = legalTargets.find((m) => m.to === sq);
+    if (selected && target) {
+      const promos = legalTargets.filter((m) => m.to === sq && m.promotion);
+      if (promos.length) return showPromoPicker(selected, sq);
+      return playerMove({ from: selected, to: sq });
+    }
+    // (re)select own piece
+    const piece = game.get(sq);
+    if (piece && piece.color === playerSide) {
+      selected = sq;
+      legalTargets = game.moves({ square: sq, verbose: true });
+    } else {
+      selected = null;
+      legalTargets = [];
+    }
+    render();
+  }
+
+  function showPromoPicker(from, to) {
+    promoEl.innerHTML = "";
+    for (const p of ["q", "r", "b", "n"]) {
+      const b = document.createElement("button");
+      b.innerHTML = `<span class="pc ${playerSide}">${GLYPH[p]}︎</span>`;
+      b.addEventListener("pointerdown", (e) => {
+        e.preventDefault();
+        promoEl.classList.remove("show");
+        playerMove({ from, to, promotion: p });
+      });
+      promoEl.appendChild(b);
+    }
+    promoEl.classList.add("show");
+  }
+
+  // ---------- Move animation ----------
+  function flyPiece(fromEl, toEl, html, done, dur) {
+    const br = boardEl.getBoundingClientRect();
+    const a = fromEl.getBoundingClientRect();
+    const b = toEl.getBoundingClientRect();
+    const fly = document.createElement("div");
+    fly.className = "fly";
+    fly.style.width = a.width + "px";
+    fly.style.height = a.height + "px";
+    fly.style.left = a.left - br.left + "px";
+    fly.style.top = a.top - br.top + "px";
+    fly.style.transitionDuration = dur + "ms";
+    fly.innerHTML = html;
+    boardEl.appendChild(fly);
+    fromEl.innerHTML = "";
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      fly.style.transform = `translate(${b.left - a.left}px, ${b.top - a.top}px)`;
+    }));
+    setTimeout(() => { fly.remove(); if (done) done(); }, dur + 40);
+  }
+
+  function clearHints() {
+    for (const div of Object.values(squares)) div.classList.remove("sel", "dot", "cap");
+  }
+
+  function rookSquares(made) {
+    if (made.flags.includes("k")) return made.color === "w" ? ["h1", "f1"] : ["h8", "f8"];
+    if (made.flags.includes("q")) return made.color === "w" ? ["a1", "d1"] : ["a8", "d8"];
+    return null;
+  }
+
+  // The move is already applied to `game`; the DOM still shows the old position,
+  // so fly the piece from its old square, then re-render and play the landing sound.
+  function animateMade(made, done) {
+    animating = true;
+    clearHints();
+    const rook = rookSquares(made);
+    if (rook) flyPiece(squares[rook[0]], squares[rook[1]], squares[rook[0]].innerHTML, null, 180);
+    flyPiece(squares[made.from], squares[made.to], squares[made.from].innerHTML, () => {
+      animating = false;
+      render();
+      if (made.promotion) sfx.promote();
+      else if (made.captured) sfx.capture();
+      else sfx.land();
+      done();
+    }, 180);
+  }
+
+  function playerMove(mv) {
+    const made = game.move(mv);
+    uciMoves.push(made.from + made.to + (made.promotion || ""));
+    lastMove = { from: made.from, to: made.to };
+    selected = null;
+    legalTargets = [];
+    animateMade(made, () => {
+      if (checkGameEnd()) return;
+      engineMove();
+    });
+  }
+
+  // ---------- Engine turn ----------
+  async function engineMove() {
+    thinking = true;
+    setStatus("Thinking…");
+    render();
+    engine.postMessage("position startpos" + (uciMoves.length ? " moves " + uciMoves.join(" ") : ""));
+    engine.postMessage("go movetime " + moveTimeMs(prefs.elo));
+    const line = await expect((l) => l.startsWith("bestmove"));
+    thinking = false;
+    const uci = line.split(/\s+/)[1];
+    if (!uci || uci === "(none)") { checkGameEnd(); return; }
+    const made = game.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci.slice(4, 5) || undefined });
+    uciMoves.push(uci);
+    lastMove = { from: made.from, to: made.to };
+    animateMade(made, () => {
+      if (!checkGameEnd()) setStatus("Your move");
+    });
+  }
+
+  // ---------- Game end / flow ----------
+  function checkGameEnd() {
+    if (!game.isGameOver()) {
+      if (game.inCheck() && game.turn() === playerSide) setStatus("Check!");
+      else if (game.turn() === playerSide) setStatus("Your move");
+      return false;
+    }
+    gameOver = true;
+    let msg;
+    if (game.isCheckmate()) {
+      msg = game.turn() === playerSide ? "Checkmate — you lose. 💀" : "Checkmate — you win! 🏆";
+    } else if (game.isStalemate()) {
+      msg = "Stalemate — draw.";
+    } else if (game.isThreefoldRepetition()) {
+      msg = "Draw by repetition.";
+    } else if (game.isInsufficientMaterial()) {
+      msg = "Draw — insufficient material.";
+    } else {
+      msg = "Draw.";
+    }
+    setStatus(msg);
+    ovMsg.textContent = msg;
+    overlay.classList.remove("hidden");
+    render();
+    return true;
+  }
+
+  async function startGame() {
+    if (!engineOk) return;
+    playerSide = prefs.side;
+    game = new Chess();
+    uciMoves = [];
+    selected = null;
+    legalTargets = [];
+    lastMove = null;
+    thinking = false;
+    gameOver = false;
+    overlay.classList.add("hidden");
+    buildBoard();
+    setStatus("Configuring engine…");
+    await configureEngine(prefs.elo);
+    if (playerSide === "b") engineMove();
+    else setStatus("Your move");
+  }
+
+  function undoPair() {
+    if (thinking || gameOver || game.turn() !== playerSide || uciMoves.length < 2) return;
+    game.undo(); game.undo();
+    uciMoves.pop(); uciMoves.pop();
+    const hist = game.history({ verbose: true });
+    lastMove = hist.length ? { from: hist[hist.length - 1].from, to: hist[hist.length - 1].to } : null;
+    selected = null;
+    legalTargets = [];
+    render();
+    setStatus("Your move");
+  }
+
+  // ---------- Setup UI ----------
+  function eloDesc(elo) {
+    if (elo < 800) return "Beginner";
+    if (elo < 1100) return "Casual";
+    if (elo < 1400) return "Club player";
+    if (elo < 1700) return "Strong club";
+    if (elo < 2000) return "Expert";
+    if (elo < 2300) return "Master";
+    if (elo < 2600) return "Grandmaster";
+    return "Superhuman";
+  }
+  function refreshEloLabel() {
+    eloLabel.textContent = `${prefs.elo} Elo — ${eloDesc(prefs.elo)}`;
+    if (prefs.elo < 1320) eloLabel.textContent += " (approx.)";
+  }
+  eloSlider.value = prefs.elo;
+  refreshEloLabel();
+  eloSlider.addEventListener("input", () => {
+    prefs.elo = parseInt(eloSlider.value, 10);
+    refreshEloLabel();
+  });
+  function setSide(side) {
+    prefs.side = side;
+    sideW.classList.toggle("on", side === "w");
+    sideB.classList.toggle("on", side === "b");
+  }
+  sideW.addEventListener("click", () => setSide("w"));
+  sideB.addEventListener("click", () => setSide("b"));
+  setSide(prefs.side);
+
+  document.getElementById("start").addEventListener("click", () => {
+    ensureAudio();
+    savePrefs();
+    startGame();
+  });
+  btnNew.addEventListener("click", () => {
+    ovMsg.textContent = "Play against Stockfish 18, right in your browser.";
+    overlay.classList.remove("hidden");
+  });
+  btnUndo.addEventListener("click", undoPair);
+
+  buildBoard();
+  setStatus("");
+</script>
+</body>
+</html>

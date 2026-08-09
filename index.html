@@ -78,6 +78,8 @@
   .card h2 { font-size: 22px; font-weight: 800; letter-spacing: 0.04em; }
   .card.snake h2 { color: var(--snake); }
   .card.robot h2 { color: var(--robot); }
+  .card.chess h2 { color: #a5b4fc; }
+  .card.checkers h2 { color: #fbbf24; }
   .card p { color: var(--muted); font-size: 14px; line-height: 1.5; }
   .card .stat { font-size: 13px; font-weight: 700; color: var(--text); opacity: 0.9; }
   .card .key {
@@ -108,8 +110,22 @@
       <div class="stat" id="robot-stat"></div>
       <span class="key">Press 2</span>
     </a>
+    <a class="card chess" href="chess.html">
+      <div class="icon">♟️</div>
+      <h2>Chess</h2>
+      <p>Face Stockfish 18 in your browser.<br>Dial it from beginner to superhuman.</p>
+      <div class="stat" id="chess-stat"></div>
+      <span class="key">Press 3</span>
+    </a>
+    <a class="card checkers" href="checkers.html">
+      <div class="icon">🔴</div>
+      <h2>Checkers</h2>
+      <p>English draughts vs a built-in engine.<br>Captures are mandatory!</p>
+      <div class="stat" id="checkers-stat"></div>
+      <span class="key">Press 4</span>
+    </a>
   </div>
-  <footer>Works in Safari on iOS (touch) and macOS (keyboard).</footer>
+  <footer>Works in Safari on iOS (touch) and macOS (keyboard).<br>Serve this folder over HTTP for chess (python3 -m http.server) — the engine can't load from file:// URLs.</footer>
 
 <script>
 (() => {
@@ -127,12 +143,22 @@
         "Best streak: " + rec.best + (rec.dragonTries > 0 ? " · 🐉 awaits!" : "");
     }
   } catch (e) { /* private browsing */ }
+  try {
+    const p = JSON.parse(localStorage.getItem("chess-prefs"));
+    if (p && p.elo) document.getElementById("chess-stat").textContent = "Engine set to " + p.elo + " Elo";
+  } catch (e) { /* private browsing */ }
+  try {
+    const p = JSON.parse(localStorage.getItem("checkers-prefs"));
+    if (p && typeof p.level === "number") {
+      document.getElementById("checkers-stat").textContent = "Engine level " + (p.level + 1) + " of 8";
+    }
+  } catch (e) { /* private browsing */ }
 
   // Quick keyboard select on desktop
+  const KEYS = { 1: "snake.html", 2: "robot.html", 3: "chess.html", 4: "checkers.html" };
   window.addEventListener("keydown", (e) => {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
-    if (e.key === "1") window.location.href = "snake.html";
-    else if (e.key === "2") window.location.href = "robot.html";
+    if (KEYS[e.key]) window.location.href = KEYS[e.key];
   });
 })();
 </script>
