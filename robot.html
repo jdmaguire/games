@@ -68,6 +68,7 @@
   #overlay .result { font-size: 30px; font-weight: 800; }
   #overlay p { color: var(--muted); font-size: 16px; line-height: 1.6; max-width: 34em; }
   #overlay .go { color: var(--text); font-weight: 600; animation: pulse 1.2s ease-in-out infinite; }
+  #overlay a { color: var(--muted); text-decoration: none; font-size: 14px; margin-top: 8px; padding: 8px 14px; }
   @keyframes pulse { 50% { opacity: 0.45; } }
   #controls {
     display: none;
@@ -104,6 +105,7 @@
       <div class="result" id="ov-result" hidden></div>
       <p id="ov-text"></p>
       <p class="go" id="ov-go"></p>
+      <a id="back" href="index.html">← Games</a>
     </div>
   </div>
   <div id="controls">
@@ -1404,6 +1406,7 @@
 
   // Tap the overlay/canvas to start or resume
   overlay.addEventListener("pointerdown", (e) => {
+    if (e.target.closest && e.target.closest("a")) return; // let the back link work
     e.preventDefault();
     ensureAudio();
     if (state === "menu" || state === "result") startFight();
@@ -1411,7 +1414,10 @@
   });
 
   // Keep iOS Safari from scrolling, bouncing, or zooming
-  document.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
+  document.addEventListener("touchmove", (e) => {
+    if (e.target.closest && e.target.closest("a")) return;
+    e.preventDefault();
+  }, { passive: false });
   document.addEventListener("gesturestart", (e) => e.preventDefault());
 
   document.addEventListener("visibilitychange", () => {

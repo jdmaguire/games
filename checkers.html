@@ -212,6 +212,17 @@
     try { localStorage.setItem("checkers-prefs", JSON.stringify(prefs)); } catch (e) { /* private browsing */ }
   }
 
+  // In-progress game persistence (saved at stable points between moves)
+  function saveGame() {
+    try {
+      localStorage.setItem("checkers-game",
+        JSON.stringify({ board, turn, clock, side: playerSide, level: prefs.level, snapshots }));
+    } catch (e) { /* private browsing */ }
+  }
+  function clearGameSave() {
+    try { localStorage.removeItem("checkers-game"); } catch (e) { /* private browsing */ }
+  }
+
   // ---------- Audio (tiny WebAudio synth; unlocked on first user gesture) ----------
   let AC = null;
   function ensureAudio() {
@@ -488,10 +499,16 @@
 
   // ---------- Turn flow ----------
   function beginPlayerTurn() {
+    snapshots.push({ bd: board.map((row) => row.slice()), clock });
+    resumePlayerTurn();
+    if (!gameOver) saveGame();
+  }
+
+  // Same as beginPlayerTurn but without recording a new undo point (used on restore)
+  function resumePlayerTurn() {
     const { moves, forced } = genMoves(board, playerSide);
     if (moves.length === 0) return endGame(-playerSide);
     if (clock >= DRAW_PLIES) return endGame(0);
-    snapshots.push({ bd: board.map((row) => row.slice()), clock });
     activeMoves = moves;
     selected = null;
     midJump = false;
@@ -558,6 +575,7 @@
     activeMoves = [];
     turn = aiSide;
     render();
+    saveGame();
     aiTurn();
   }
 
@@ -606,6 +624,7 @@
 
   function endGame(winner) {
     gameOver = true;
+    clearGameSave();
     const msg = winner === 0 ? "Draw — no progress." : winner === playerSide ? "You win! 🏆" : "You lose. 💀";
     setStatus(msg);
     ovMsg.textContent = msg;
@@ -628,6 +647,7 @@
     snapshots = [];
     overlay.classList.add("hidden");
     buildBoard();
+    saveGame();
     if (turn === playerSide) beginPlayerTurn();
     else aiTurn();
   }
@@ -641,6 +661,7 @@
     const { moves } = genMoves(board, playerSide);
     activeMoves = moves;
     selected = null;
+    saveGame();
     setStatus("Your move");
     render();
   }
@@ -673,12 +694,41 @@
   });
   btnUndo.addEventListener("click", undoTurn);
 
-  // Initial render behind the setup overlay
-  board = newBoard();
-  playerSide = prefs.side;
-  turn = RED;
-  buildBoard();
-  setStatus("");
+  // Boot: resume a saved game if one exists, otherwise show the menu
+  const validBoard = (b) => Array.isArray(b) && b.length === 8 &&
+    b.every((row) => Array.isArray(row) && row.length === 8 && row.every((v) => [-2, -1, 0, 1, 2].includes(v)));
+  let resumed = false;
+  try {
+    const sv = JSON.parse(localStorage.getItem("checkers-game"));
+    if (sv && validBoard(sv.board) && (sv.side === RED || sv.side === BLK) && (sv.turn === RED || sv.turn === BLK)) {
+      board = sv.board.map((row) => row.slice());
+      turn = sv.turn;
+      clock = typeof sv.clock === "number" ? sv.clock : 0;
+      playerSide = sv.side;
+      aiSide = -playerSide;
+      snapshots = Array.isArray(sv.snapshots) ? sv.snapshots : [];
+      if (typeof sv.level === "number") {
+        prefs.level = sv.level;
+        lvlSlider.value = prefs.level;
+        refreshLvlLabel();
+      }
+      setSide(playerSide);
+      thinking = false; gameOver = false; midJump = false;
+      selected = null; activeMoves = []; lastPath = [];
+      overlay.classList.add("hidden");
+      buildBoard();
+      resumed = true;
+      if (turn === playerSide) resumePlayerTurn();
+      else aiTurn();
+    }
+  } catch (e) { /* corrupted save — fall through to the menu */ }
+  if (!resumed) {
+    board = newBoard();
+    playerSide = prefs.side;
+    turn = RED;
+    buildBoard();
+    setStatus("");
+  }
 })();
 </script>
 </body>

@@ -72,7 +72,7 @@
     align-items: center;
     justify-content: center;
     pointer-events: none;
-    font-size: calc(min(94vmin, 560px) / 8 * 0.74);
+    font-size: calc(min(94vmin, 560px) / 8 * 0.88);
     line-height: 1;
     transition: transform 0.18s ease;
     will-change: transform;
@@ -82,7 +82,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: calc(min(94vmin, 560px) / 8 * 0.74);
+    font-size: calc(min(94vmin, 560px) / 8 * 0.88);
     line-height: 1;
     cursor: pointer;
   }
@@ -203,6 +203,16 @@
   } catch (e) { /* private browsing */ }
   function savePrefs() {
     try { localStorage.setItem("chess-prefs", JSON.stringify(prefs)); } catch (e) { /* private browsing */ }
+  }
+
+  // In-progress game persistence: the UCI move list fully reconstructs the position
+  function saveGame() {
+    try {
+      localStorage.setItem("chess-game", JSON.stringify({ moves: uciMoves, side: playerSide, elo: prefs.elo }));
+    } catch (e) { /* private browsing */ }
+  }
+  function clearGameSave() {
+    try { localStorage.removeItem("chess-game"); } catch (e) { /* private browsing */ }
   }
 
   // ---------- Audio (tiny WebAudio synth; unlocked on first user gesture) ----------
@@ -454,6 +464,7 @@
     lastMove = { from: made.from, to: made.to };
     selected = null;
     legalTargets = [];
+    saveGame();
     animateMade(made, () => {
       if (checkGameEnd()) return;
       engineMove();
@@ -474,6 +485,7 @@
     const made = game.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci.slice(4, 5) || undefined });
     uciMoves.push(uci);
     lastMove = { from: made.from, to: made.to };
+    saveGame();
     animateMade(made, () => {
       if (!checkGameEnd()) setStatus("Your move");
     });
@@ -487,6 +499,7 @@
       return false;
     }
     gameOver = true;
+    clearGameSave();
     let msg;
     if (game.isCheckmate()) {
       msg = game.turn() === playerSide ? "Checkmate — you lose. 💀" : "Checkmate — you win! 🏆";
@@ -517,10 +530,46 @@
     thinking = false;
     gameOver = false;
     overlay.classList.add("hidden");
+    saveGame();
     buildBoard();
     setStatus("Configuring engine…");
     await configureEngine(prefs.elo);
     if (playerSide === "b") engineMove();
+    else setStatus("Your move");
+  }
+
+  // Restore an in-progress game after a refresh
+  async function resumeGame(saved) {
+    const g = new Chess();
+    try {
+      for (const uci of saved.moves) {
+        g.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci.slice(4, 5) || undefined });
+      }
+    } catch (e) {
+      clearGameSave(); // corrupted save — fall back to the menu
+      buildBoard();
+      setStatus("");
+      return;
+    }
+    game = g;
+    uciMoves = saved.moves.slice();
+    playerSide = saved.side;
+    setSide(saved.side);
+    prefs.elo = saved.elo;
+    eloSlider.value = prefs.elo;
+    refreshEloLabel();
+    const last = uciMoves[uciMoves.length - 1];
+    lastMove = last ? { from: last.slice(0, 2), to: last.slice(2, 4) } : null;
+    selected = null;
+    legalTargets = [];
+    thinking = false;
+    gameOver = false;
+    overlay.classList.add("hidden");
+    buildBoard();
+    setStatus("Configuring engine…");
+    await configureEngine(prefs.elo);
+    if (game.isGameOver()) { checkGameEnd(); return; }
+    if (game.turn() !== playerSide) engineMove();
     else setStatus("Your move");
   }
 
@@ -532,6 +581,7 @@
     lastMove = hist.length ? { from: hist[hist.length - 1].from, to: hist[hist.length - 1].to } : null;
     selected = null;
     legalTargets = [];
+    saveGame();
     render();
     setStatus("Your move");
   }
@@ -577,8 +627,22 @@
   });
   btnUndo.addEventListener("click", undoPair);
 
-  buildBoard();
-  setStatus("");
+  // Boot: resume a saved game if one exists, otherwise show the menu
+  let resumed = false;
+  try {
+    const savedGame = JSON.parse(localStorage.getItem("chess-game"));
+    if (engine && savedGame && Array.isArray(savedGame.moves) &&
+        savedGame.moves.every((m) => typeof m === "string") &&
+        (savedGame.side === "w" || savedGame.side === "b")) {
+      if (typeof savedGame.elo !== "number") savedGame.elo = prefs.elo;
+      resumed = true;
+      resumeGame(savedGame);
+    }
+  } catch (e) { /* corrupted save — fall through to the menu */ }
+  if (!resumed) {
+    buildBoard();
+    setStatus("");
+  }
 </script>
 </body>
 </html>

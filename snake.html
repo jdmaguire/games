@@ -55,6 +55,7 @@
     font-variant-numeric: tabular-nums;
   }
   #hud .label { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; }
+  #hud a { color: var(--muted); text-decoration: none; font-size: 14px; align-self: center; }
   #hud .value { font-weight: 700; font-size: 22px; }
   #board-wrap { position: relative; }
   canvas {
@@ -87,6 +88,7 @@
 <body>
   <div id="hud">
     <div><div class="label">Score</div><div class="value" id="score">0</div></div>
+    <a id="back" href="index.html">← Games</a>
     <div style="text-align:right"><div class="label">Best</div><div class="value" id="best">0</div></div>
   </div>
   <div id="board-wrap">
@@ -358,6 +360,7 @@
   let touchMoved = false;
 
   document.addEventListener("touchstart", (e) => {
+    if (e.target.closest && e.target.closest("a")) return; // let link taps through
     e.preventDefault();
     const t = e.changedTouches[0];
     touchAnchor = { x: t.clientX, y: t.clientY };
@@ -365,6 +368,7 @@
   }, { passive: false });
 
   document.addEventListener("touchmove", (e) => {
+    if (e.target.closest && e.target.closest("a")) return;
     e.preventDefault();
     if (!touchAnchor || state !== "playing") return;
     const t = e.changedTouches[0];
@@ -381,6 +385,7 @@
   }, { passive: false });
 
   document.addEventListener("touchend", (e) => {
+    if (e.target.closest && e.target.closest("a")) return;
     e.preventDefault();
     if (!touchMoved) {
       if (state === "idle" || state === "over") start();
