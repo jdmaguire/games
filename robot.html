@@ -1,0 +1,982 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Sockbot Showdown</title>
+<style>
+  :root {
+    --bg: #101223;
+    --text: #f1f5f9;
+    --muted: #9aa3b8;
+    --red: #ef4444;
+    --blue: #3b82f6;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    /* Disable pull-to-refresh, scroll bounce, and double-tap zoom on iOS */
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
+  }
+  body {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;  /* fallback */
+    height: 100dvh; /* iOS Safari dynamic viewport */
+  }
+  #stage { position: relative; flex: 1; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  #overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    text-align: center;
+    background: rgba(10, 12, 26, 0.8);
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
+    padding: 24px;
+    z-index: 5;
+  }
+  #overlay.hidden { display: none; }
+  #overlay h1 {
+    font-size: clamp(30px, 8vw, 52px);
+    font-style: italic;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    background: linear-gradient(180deg, #fbbf24, #ef4444);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  #overlay .result { font-size: 30px; font-weight: 800; }
+  #overlay p { color: var(--muted); font-size: 16px; line-height: 1.6; max-width: 34em; }
+  #overlay .go { color: var(--text); font-weight: 600; animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: 0.45; } }
+  #controls {
+    display: none;
+    gap: 10px;
+    padding: 10px
+             max(10px, env(safe-area-inset-right))
+             max(10px, env(safe-area-inset-bottom))
+             max(10px, env(safe-area-inset-left));
+    background: #0a0c1a;
+  }
+  body.touch #controls { display: flex; }
+  #controls button {
+    flex: 1;
+    height: 84px;
+    border: 2px solid rgba(255, 255, 255, 0.14);
+    border-radius: 16px;
+    background: #1c2033;
+    color: var(--text);
+    font: 800 17px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    letter-spacing: 0.06em;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  #controls button.pressed { background: #34405f; transform: scale(0.96); }
+  #controls #btn-block { flex: 0.9; background: #232b45; }
+</style>
+</head>
+<body>
+  <div id="stage">
+    <canvas id="game"></canvas>
+    <div id="overlay">
+      <h1 id="ov-title">Sockbot Showdown</h1>
+      <div class="result" id="ov-result" hidden></div>
+      <p id="ov-text"></p>
+      <p class="go" id="ov-go"></p>
+    </div>
+  </div>
+  <div id="controls">
+    <button id="btn-left">◀ LEFT JAB</button>
+    <button id="btn-block">🛡 BLOCK</button>
+    <button id="btn-right">RIGHT JAB ▶</button>
+  </div>
+
+<script>
+(() => {
+  "use strict";
+
+  // ---------- Tuning ----------
+  const MAX_HP = 100;
+  const JAB_DUR = 280, JAB_CONTACT = 120;   // ms: full swing / moment it lands
+  const ARM_CD = 550, GLOBAL_CD = 250;      // ms between punches (per arm / any arm)
+  const JAB_DMG = 10, COUNTER_MULT = 1.5, CHIP_DMG = 2;
+  const CPU_DMG = 12;
+  const CPU_PUNCH_MS = 210;                 // cpu glove flies at the camera for this long
+  const STUN_MS = 600, RECOVER_MS = 750;
+  const MAX_LEVEL = 8;                      // difficulty cap (cpu speeds up per win)
+
+  const TAU = Math.PI * 2;
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  const rand = (a, b) => a + Math.random() * (b - a);
+
+  // ---------- DOM ----------
+  const canvas = document.getElementById("game");
+  const ctx = canvas.getContext("2d");
+  const overlay = document.getElementById("overlay");
+  const ovTitle = document.getElementById("ov-title");
+  const ovResult = document.getElementById("ov-result");
+  const ovText = document.getElementById("ov-text");
+  const ovGo = document.getElementById("ov-go");
+
+  // roundRect shipped in Safari 16; fall back to plain rects before that
+  if (!CanvasRenderingContext2D.prototype.roundRect) {
+    CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h) {
+      this.rect(x, y, w, h);
+    };
+  }
+
+  const isTouch = window.matchMedia("(pointer: coarse)").matches || "ontouchstart" in window;
+  if (isTouch) document.body.classList.add("touch");
+
+  // ---------- Audio (tiny WebAudio synth; unlocked on first user gesture) ----------
+  let AC = null;
+  function ensureAudio() {
+    try {
+      if (!AC) AC = new (window.AudioContext || window.webkitAudioContext)();
+      if (AC.state === "suspended") AC.resume();
+    } catch (e) { AC = null; }
+  }
+  function beep(f, f2, dur, type, vol, when) {
+    if (!AC) return;
+    try {
+      const t0 = AC.currentTime + (when || 0);
+      const o = AC.createOscillator(), g = AC.createGain();
+      o.type = type;
+      o.frequency.setValueAtTime(f, t0);
+      if (f2) o.frequency.exponentialRampToValueAtTime(f2, t0 + dur);
+      g.gain.setValueAtTime(vol, t0);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      o.connect(g).connect(AC.destination);
+      o.start(t0);
+      o.stop(t0 + dur + 0.05);
+    } catch (e) { /* audio is best-effort */ }
+  }
+  function thud(dur, vol) {
+    if (!AC) return;
+    try {
+      const n = Math.floor(AC.sampleRate * dur);
+      const buf = AC.createBuffer(1, n, AC.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+      const src = AC.createBufferSource(), g = AC.createGain();
+      src.buffer = buf;
+      g.gain.value = vol;
+      src.connect(g).connect(AC.destination);
+      src.start();
+    } catch (e) { /* audio is best-effort */ }
+  }
+  const sfx = {
+    hit:   () => { thud(0.09, 0.3); beep(130, 55, 0.12, "square", 0.22); },
+    clang: () => { beep(620, 240, 0.18, "square", 0.13); beep(930, 400, 0.12, "triangle", 0.1); },
+    whiff: () => beep(900, 300, 0.07, "sawtooth", 0.05),
+    hurt:  () => { thud(0.12, 0.3); beep(220, 70, 0.2, "sawtooth", 0.18); },
+    bell:  () => { beep(1320, null, 0.5, "triangle", 0.18); beep(1320, null, 0.5, "triangle", 0.18, 0.35); },
+    boing: () => { beep(180, 850, 0.16, "sine", 0.25); beep(850, 220, 0.4, "sine", 0.2, 0.16); },
+  };
+
+  // ---------- Persistent W-L record ----------
+  let record = { streak: 0, best: 0 };
+  try {
+    const saved = JSON.parse(localStorage.getItem("sockbot-record"));
+    if (saved && typeof saved.streak === "number" && typeof saved.best === "number") {
+      record = { streak: saved.streak, best: saved.best };
+    }
+  } catch (e) { /* private browsing */ }
+  function saveRecord() {
+    try { localStorage.setItem("sockbot-record", JSON.stringify(record)); } catch (e) { /* private browsing */ }
+  }
+
+  // ---------- Game state ----------
+  let W = 0, H = 0;             // canvas size in CSS px
+  let state = "menu";           // menu | fight | ko | result | paused
+  let now = 0;                  // ms clock, advanced by dt
+  let fightT = 0;               // time since round start (for FIGHT! banner)
+  let koT = 0, winner = null;   // ko animation clock
+  let shakeT = 0, shakeMag = 0;
+  let particles = [];
+
+  const player = { hp: MAX_HP, blockHeld: false, punch: null, armCd: { L: 0, R: 0 }, globalCd: 0, hurtT: 0 };
+  const cpu = { hp: MAX_HP, st: "idle", t: 0, side: "L", level: 0, recoilT: 0, hitStreak: 0, streakT: 0 };
+  cpu.level = clamp(record.streak, 0, MAX_LEVEL); // level always tracks the current win streak
+
+  const playerBlocking = () => player.blockHeld && !player.punch;
+
+  // ---------- Sizing ----------
+  function resize() {
+    const stage = document.getElementById("stage");
+    W = stage.clientWidth;
+    H = stage.clientHeight;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  // ---------- Match flow ----------
+  function startFight() {
+    player.hp = MAX_HP; player.punch = null; player.armCd.L = 0; player.armCd.R = 0;
+    player.globalCd = 0; player.hurtT = 0;
+    cpu.hp = MAX_HP; cpu.st = "idle"; cpu.t = rand(400, 800); cpu.recoilT = 0; cpu.hitStreak = 0;
+    particles = [];
+    fightT = 0;
+    state = "fight";
+    overlay.classList.add("hidden");
+    sfx.bell();
+  }
+
+  function knockout(who) {
+    state = "ko";
+    winner = who; // "player" | "cpu"
+    koT = 0;
+    cpu.st = "idle"; // clear any mid-punch pose so it doesn't freeze over the KO animation
+    player.punch = null;
+    sfx.boing();
+    if (who === "player") {
+      record.streak++;
+      record.best = Math.max(record.best, record.streak);
+      cpu.level = clamp(record.streak, 0, MAX_LEVEL);
+    } else {
+      record.streak = 0; // a loss ends the run — boss goes back to level 1
+      cpu.level = 0;
+    }
+    saveRecord();
+  }
+
+  function showMenu() {
+    ovTitle.textContent = "Sockbot Showdown";
+    ovResult.hidden = true;
+    ovText.innerHTML = isTouch
+      ? "Jab with the corner buttons, hold <b>BLOCK</b> when the blue bot's glove flashes.<br>Block a punch to stun him — then swing away!"
+      : "<b>A</b> / <b>D</b> to jab, hold <b>S</b> (or Space) to block when the blue bot's glove flashes.<br>Block a punch to stun him — then swing away! <b>P</b> pauses.";
+    ovGo.textContent = isTouch ? "Tap to fight" : "Press any key to fight";
+    overlay.classList.remove("hidden");
+  }
+
+  function showResult() {
+    state = "result";
+    ovTitle.textContent = "Sockbot Showdown";
+    ovResult.hidden = false;
+    if (winner === "player") {
+      ovResult.textContent = "YOU WIN! 🏆";
+      ovResult.style.color = "#4ade80";
+      ovText.innerHTML = "You knocked his block off!<br>He'll be faster next time…" +
+        `<br><br>Win streak: <b>${record.streak}</b> · Best: <b>${record.best}</b>`;
+    } else {
+      ovResult.textContent = "YOU LOSE 💥";
+      ovResult.style.color = "#f87171";
+      ovText.innerHTML = "Your block got knocked off — streak over, boss back to level 1.<br>Watch for the glove flash and hold block." +
+        `<br><br>Best streak: <b>${record.best}</b>`;
+    }
+    ovGo.textContent = isTouch ? "Tap for a rematch" : "Press any key for a rematch";
+    overlay.classList.remove("hidden");
+  }
+
+  function togglePause() {
+    if (state === "fight") {
+      state = "paused";
+      ovTitle.textContent = "Paused";
+      ovResult.hidden = true;
+      ovText.textContent = "";
+      ovGo.textContent = isTouch ? "Tap to resume" : "Press any key to resume";
+      overlay.classList.remove("hidden");
+    } else if (state === "paused") {
+      state = "fight";
+      overlay.classList.add("hidden");
+    }
+  }
+
+  // ---------- Combat ----------
+  function throwJab(side) {
+    if (state !== "fight" || fightT < 600) return;
+    if (player.punch || player.globalCd > 0 || player.armCd[side] > 0) return;
+    player.punch = { side, t: 0, landed: false };
+    player.armCd[side] = ARM_CD;
+    player.globalCd = GLOBAL_CD;
+    // cpu has a chance to see it coming and guard up
+    if (cpu.st === "idle" && Math.random() < 0.18 + 0.04 * cpu.level) {
+      cpu.st = "block"; cpu.t = rand(420, 640);
+    }
+  }
+
+  function resolvePlayerJab() {
+    const headPos = cpuHeadPos();
+    const speed = cpu.level / MAX_LEVEL;
+    if (cpu.st === "block") {
+      cpu.hp = Math.max(0, cpu.hp - CHIP_DMG);
+      sfx.clang();
+      spawnSparks(headPos.x, headPos.y + 40, "#cbd5e1", 6);
+      if (cpu.hp <= 0) return knockout("player");
+      // jabbing into his guard usually earns a fast counter
+      if (Math.random() < 0.5 + 0.05 * cpu.level) {
+        cpu.st = "windup";
+        cpu.side = Math.random() < 0.5 ? "L" : "R";
+        cpu.t = lerp(380, 250, speed);
+      }
+    } else {
+      let dmg = JAB_DMG + rand(-1, 3);
+      // hitting his wind-up only interrupts sometimes — otherwise he powers through
+      if (cpu.st === "windup" && Math.random() < 0.45 - 0.03 * cpu.level) {
+        dmg *= COUNTER_MULT;
+        cpu.st = "stunned"; cpu.t = STUN_MS;
+      }
+      cpu.hp = Math.max(0, cpu.hp - dmg);
+      cpu.recoilT = 200;
+      cpu.hitStreak++; cpu.streakT = 1200;
+      sfx.hit();
+      spawnSparks(headPos.x, headPos.y, "#fbbf24", 10);
+      shake(120, 5);
+      if (cpu.hp <= 0) return knockout("player");
+      // eats two quick hits -> guards up (unless already mid-attack)
+      if (cpu.hitStreak >= 2 && cpu.st !== "stunned" && cpu.st !== "windup" && cpu.st !== "punch") {
+        cpu.hitStreak = 0;
+        cpu.st = "block"; cpu.t = rand(500, 800);
+      }
+    }
+  }
+
+  function resolveCpuPunch() {
+    if (playerBlocking()) {
+      sfx.clang();
+      spawnSparks(W / 2, H * 0.72, "#cbd5e1", 8);
+      cpu.st = "recover"; cpu.t = RECOVER_MS; // vulnerable window
+    } else {
+      player.hp = Math.max(0, player.hp - (CPU_DMG + rand(-1, 3) + Math.floor(cpu.level / 2)));
+      player.hurtT = 350;
+      sfx.hurt();
+      shake(220, 11);
+      if (player.hp <= 0) return knockout("cpu");
+      // landed clean — often keeps swinging with the other glove
+      if (Math.random() < 0.35 + 0.05 * cpu.level) {
+        cpu.st = "windup";
+        cpu.side = cpu.side === "L" ? "R" : "L";
+        cpu.t = lerp(400, 260, cpu.level / MAX_LEVEL);
+      } else {
+        cpu.st = "recover"; cpu.t = RECOVER_MS * 0.5;
+      }
+    }
+  }
+
+  function updateCpu(dt) {
+    if (cpu.recoilT > 0) cpu.recoilT -= dt;
+    if (cpu.streakT > 0) { cpu.streakT -= dt; if (cpu.streakT <= 0) cpu.hitStreak = 0; }
+    cpu.t -= dt;
+    if (cpu.t > 0) return;
+    const speed = cpu.level / MAX_LEVEL; // 0..1
+    switch (cpu.st) {
+      case "idle": {
+        const roll = Math.random();
+        if (roll < 0.72) {
+          cpu.st = "windup";
+          cpu.side = Math.random() < 0.5 ? "L" : "R";
+          cpu.t = lerp(500, 280, speed);
+        } else if (roll < 0.88) {
+          cpu.st = "block"; cpu.t = rand(450, 750);
+        } else {
+          cpu.t = rand(250, 550); // shuffle in place
+        }
+        break;
+      }
+      case "windup": cpu.st = "punch"; cpu.t = CPU_PUNCH_MS; break;
+      case "punch": resolveCpuPunch(); break; // sets next state itself
+      case "block":
+        // often comes out of guard swinging
+        if (Math.random() < 0.45 + 0.04 * cpu.level) {
+          cpu.st = "windup";
+          cpu.side = Math.random() < 0.5 ? "L" : "R";
+          cpu.t = lerp(450, 280, speed);
+        } else {
+          cpu.st = "idle"; cpu.t = lerp(rand(400, 900), rand(150, 450), speed);
+        }
+        break;
+      case "recover":
+      case "stunned":
+        cpu.st = "idle"; cpu.t = lerp(rand(350, 800), rand(150, 400), speed);
+        break;
+    }
+  }
+
+  function updatePlayer(dt) {
+    player.armCd.L = Math.max(0, player.armCd.L - dt);
+    player.armCd.R = Math.max(0, player.armCd.R - dt);
+    player.globalCd = Math.max(0, player.globalCd - dt);
+    if (player.hurtT > 0) player.hurtT -= dt;
+    if (player.punch) {
+      const prev = player.punch.t;
+      player.punch.t += dt;
+      if (!player.punch.landed && prev < JAB_CONTACT && player.punch.t >= JAB_CONTACT) {
+        player.punch.landed = true;
+        resolvePlayerJab();
+      }
+      if (player.punch && player.punch.t >= JAB_DUR) player.punch = null;
+    }
+  }
+
+  // ---------- Effects ----------
+  function shake(ms, mag) { shakeT = ms; shakeMag = mag; }
+
+  function spawnSparks(x, y, color, n) {
+    for (let i = 0; i < n; i++) {
+      const a = rand(0, TAU), v = rand(0.08, 0.35);
+      particles.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 0.1, life: rand(250, 450), t: 0, color });
+    }
+  }
+
+  function updateParticles(dt) {
+    for (const p of particles) {
+      p.t += dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vy += 0.0009 * dt;
+    }
+    particles = particles.filter((p) => p.t < p.life);
+  }
+
+  // ---------- Layout helpers ----------
+  const S = () => Math.min(W, H) / 640; // world scale unit
+
+  function cpuHeadPos() {
+    const s = S();
+    let y = H * 0.34;
+    if (state === "ko" && winner === "player") y -= springOffset() * s;
+    return { x: W / 2, y };
+  }
+
+  function springOffset() {
+    // Head pops up with a bouncy overshoot, then settles high
+    const t = clamp(koT / 500, 0, 1);
+    const bounce = 1 - Math.pow(1 - t, 2) * Math.cos(t * 9);
+    return 130 * bounce;
+  }
+
+  // ---------- Drawing ----------
+  function drawRing(s) {
+    // Backdrop
+    const bg = ctx.createLinearGradient(0, 0, 0, H);
+    bg.addColorStop(0, "#0b0d1d");
+    bg.addColorStop(1, "#1a1e38");
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, H);
+
+    // Crowd dots
+    ctx.fillStyle = "rgba(255,255,255,0.06)";
+    for (let i = 0; i < 60; i++) {
+      const x = (i * 97.3) % W;
+      const y = (i * 53.7) % (H * 0.28);
+      ctx.fillRect(x, y, 3 * s, 3 * s);
+    }
+
+    // Yellow arena floor (trapezoid, like the toy base)
+    const backY = H * 0.42, backHalf = W * 0.34;
+    ctx.fillStyle = "#e0a92f";
+    ctx.beginPath();
+    ctx.moveTo(W / 2 - backHalf, backY);
+    ctx.lineTo(W / 2 + backHalf, backY);
+    ctx.lineTo(W / 2 + W * 0.85, H);
+    ctx.lineTo(W / 2 - W * 0.85, H);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "rgba(0,0,0,0.12)"; // floor shading
+    ctx.beginPath();
+    ctx.moveTo(W / 2 - backHalf, backY);
+    ctx.lineTo(W / 2 + backHalf, backY);
+    ctx.lineTo(W / 2 + W * 0.5, H * 0.62);
+    ctx.lineTo(W / 2 - W * 0.5, H * 0.62);
+    ctx.closePath();
+    ctx.fill();
+
+    // Ropes & corner posts
+    const postL = W / 2 - backHalf, postR = W / 2 + backHalf;
+    ctx.lineWidth = 3.5 * s;
+    const ropeColors = ["#ef4444", "#e2e8f0", "#3b82f6"];
+    for (let i = 0; i < 3; i++) {
+      const y = backY - (26 + i * 24) * s;
+      ctx.strokeStyle = ropeColors[i];
+      ctx.beginPath();
+      ctx.moveTo(postL, y);
+      ctx.lineTo(postR, y);
+      ctx.stroke();
+      // side ropes running past the camera
+      ctx.beginPath();
+      ctx.moveTo(postL, y);
+      ctx.lineTo(-W * 0.15, y + H * 0.55);
+      ctx.moveTo(postR, y);
+      ctx.lineTo(W * 1.15, y + H * 0.55);
+      ctx.stroke();
+    }
+    ctx.fillStyle = "#334155";
+    ctx.fillRect(postL - 6 * s, backY - 86 * s, 12 * s, 86 * s);
+    ctx.fillRect(postR - 6 * s, backY - 86 * s, 12 * s, 86 * s);
+  }
+
+  function drawCpu(s, t) {
+    const cx = W / 2;
+    const bob = Math.sin(t * 0.003) * 5 * s;
+    const stunWob = cpu.st === "stunned" ? Math.sin(t * 0.02) * 8 * s : 0;
+    const recoil = cpu.recoilT > 0 ? (cpu.recoilT / 200) * 14 * s : 0;
+    const headY = H * 0.34 + bob - recoil;
+    const shoulderY = headY + 62 * s;
+    const koPop = state === "ko" && winner === "player" ? springOffset() * s : 0;
+
+    ctx.save();
+    ctx.translate(stunWob, 0);
+
+    // Pedestal stand
+    ctx.fillStyle = "#1f2937";
+    ctx.beginPath();
+    ctx.ellipse(cx, H * 0.60, 95 * s, 20 * s, 0, 0, TAU);
+    ctx.fill();
+    ctx.fillRect(cx - 26 * s, shoulderY + 100 * s, 52 * s, H * 0.60 - (shoulderY + 100 * s));
+
+    // Torso
+    ctx.fillStyle = "#2563eb";
+    ctx.beginPath();
+    ctx.moveTo(cx - 78 * s, shoulderY);
+    ctx.lineTo(cx + 78 * s, shoulderY);
+    ctx.lineTo(cx + 52 * s, shoulderY + 120 * s);
+    ctx.lineTo(cx - 52 * s, shoulderY + 120 * s);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#1e40af"; // chest plate
+    ctx.fillRect(cx - 34 * s, shoulderY + 18 * s, 68 * s, 46 * s);
+    ctx.fillStyle = "#facc15";
+    ctx.fillRect(cx - 10 * s, shoulderY + 30 * s, 20 * s, 20 * s);
+
+    // Neck / spring
+    if (koPop > 0) {
+      ctx.strokeStyle = "#94a3b8";
+      ctx.lineWidth = 4 * s;
+      ctx.beginPath();
+      const segs = 7;
+      for (let i = 0; i <= segs; i++) {
+        const yy = shoulderY - (koPop * i) / segs;
+        const xx = cx + (i % 2 === 0 ? -10 : 10) * s;
+        i === 0 ? ctx.moveTo(xx, yy) : ctx.lineTo(xx, yy);
+      }
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = "#475569";
+      ctx.fillRect(cx - 14 * s, headY + 28 * s, 28 * s, 22 * s);
+    }
+
+    // Head
+    const hy = headY - koPop;
+    ctx.fillStyle = "#3b82f6";
+    ctx.beginPath();
+    ctx.roundRect(cx - 48 * s, hy - 34 * s, 96 * s, 70 * s, 16 * s);
+    ctx.fill();
+    // Antenna
+    ctx.strokeStyle = "#94a3b8";
+    ctx.lineWidth = 3 * s;
+    ctx.beginPath();
+    ctx.moveTo(cx, hy - 34 * s);
+    ctx.lineTo(cx, hy - 52 * s);
+    ctx.stroke();
+    ctx.fillStyle = "#f87171";
+    ctx.beginPath();
+    ctx.arc(cx, hy - 55 * s, 5 * s, 0, TAU);
+    ctx.fill();
+    // Visor + eyes
+    ctx.fillStyle = "#0f172a";
+    ctx.beginPath();
+    ctx.roundRect(cx - 36 * s, hy - 14 * s, 72 * s, 22 * s, 8 * s);
+    ctx.fill();
+    if (cpu.st === "stunned" || (state === "ko" && winner === "player")) {
+      ctx.strokeStyle = "#fbbf24";
+      ctx.lineWidth = 3 * s;
+      for (const ex of [-18, 18]) {
+        ctx.beginPath();
+        ctx.moveTo(cx + (ex - 6) * s, hy - 9 * s); ctx.lineTo(cx + (ex + 6) * s, hy + 3 * s);
+        ctx.moveTo(cx + (ex + 6) * s, hy - 9 * s); ctx.lineTo(cx + (ex - 6) * s, hy + 3 * s);
+        ctx.stroke();
+      }
+    } else {
+      ctx.fillStyle = cpu.st === "windup" || cpu.st === "punch" ? "#fb7185" : "#7dd3fc";
+      ctx.fillRect(cx - 24 * s, hy - 9 * s, 12 * s, 12 * s);
+      ctx.fillRect(cx + 12 * s, hy - 9 * s, 12 * s, 12 * s);
+    }
+
+    // Stun stars
+    if (cpu.st === "stunned") {
+      ctx.fillStyle = "#fbbf24";
+      ctx.font = `${Math.round(18 * s)}px -apple-system, sans-serif`;
+      for (let i = 0; i < 3; i++) {
+        const a = t * 0.005 + (i * TAU) / 3;
+        ctx.fillText("✶", cx + Math.cos(a) * 64 * s - 8 * s, hy - 40 * s + Math.sin(a) * 12 * s);
+      }
+    }
+
+    // Arms + gloves (skip the punching arm here; it's drawn over the player layer)
+    for (const side of ["L", "R"]) {
+      const sign = side === "L" ? -1 : 1;
+      const shoulder = { x: cx + sign * 78 * s, y: shoulderY + 8 * s };
+      let glove;
+      if (cpu.st === "block") {
+        glove = { x: cx + sign * 30 * s, y: hy + 4 * s, r: 30 * s };
+      } else if ((cpu.st === "windup" || cpu.st === "punch") && cpu.side === side) {
+        if (cpu.st === "punch") continue;
+        glove = { x: cx + sign * 130 * s, y: shoulderY - 30 * s, r: 32 * s };
+      } else if (cpu.st === "stunned") {
+        glove = { x: cx + sign * 105 * s, y: shoulderY + 95 * s, r: 30 * s };
+      } else {
+        glove = { x: cx + sign * 92 * s, y: shoulderY + 46 * s + bob, r: 30 * s };
+      }
+      ctx.strokeStyle = "#1e40af";
+      ctx.lineWidth = 16 * s;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(shoulder.x, shoulder.y);
+      ctx.lineTo(glove.x, glove.y);
+      ctx.stroke();
+      ctx.fillStyle = "#3b82f6";
+      ctx.beginPath();
+      ctx.arc(glove.x, glove.y, glove.r, 0, TAU);
+      ctx.fill();
+      // Warning flash on the winding-up glove
+      if (cpu.st === "windup" && cpu.side === side && Math.sin(t * 0.025) > -0.2) {
+        ctx.strokeStyle = "#fbbf24";
+        ctx.lineWidth = 5 * s;
+        ctx.beginPath();
+        ctx.arc(glove.x, glove.y, glove.r + 7 * s, 0, TAU);
+        ctx.stroke();
+      }
+    }
+
+    // White flash when he takes a hit
+    if (cpu.recoilT > 0) {
+      ctx.fillStyle = `rgba(255,255,255,${0.4 * (cpu.recoilT / 200)})`;
+      ctx.beginPath();
+      ctx.roundRect(cx - 48 * s, hy - 34 * s, 96 * s, 70 * s, 16 * s);
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+
+  // The cpu's punching glove flies at the camera — drawn on top of everything
+  function drawCpuIncomingGlove(s) {
+    if (cpu.st !== "punch") return;
+    const sign = cpu.side === "L" ? -1 : 1;
+    const p = 1 - cpu.t / CPU_PUNCH_MS; // 0 -> 1
+    const x = lerp(W / 2 + sign * 130 * s, W / 2 + sign * 46 * s, p);
+    const y = lerp(H * 0.40, H * 0.78, p);
+    const r = lerp(32 * s, 98 * s, p * p);
+    ctx.strokeStyle = "#1e40af";
+    ctx.lineWidth = lerp(16 * s, 34 * s, p);
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(W / 2 + sign * 78 * s, H * 0.44);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    ctx.fillStyle = "#3b82f6";
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,0.25)";
+    ctx.beginPath();
+    ctx.arc(x - r * 0.3, y - r * 0.3, r * 0.35, 0, TAU);
+    ctx.fill();
+  }
+
+  function drawPlayer(s, t) {
+    const cx = W / 2;
+    const bob = Math.sin(t * 0.0026 + 1.3) * 4 * s;
+    const koDrop = state === "ko" && winner === "cpu" ? clamp(koT / 400, 0, 1) * 70 * s : 0;
+    const headTop = H - 92 * s + bob + koDrop;
+    const koPop = state === "ko" && winner === "cpu" ? springOffset() * s : 0;
+
+    // Shoulders hint
+    ctx.fillStyle = "#7f1d1d";
+    ctx.beginPath();
+    ctx.ellipse(cx, H + 30 * s, 240 * s, 110 * s, 0, Math.PI, TAU);
+    ctx.fill();
+
+    // Spring on KO (our head pops too)
+    if (koPop > 0) {
+      ctx.strokeStyle = "#94a3b8";
+      ctx.lineWidth = 5 * s;
+      ctx.beginPath();
+      const segs = 7;
+      for (let i = 0; i <= segs; i++) {
+        const yy = H - 30 * s - (koPop * i) / segs;
+        const xx = cx + (i % 2 === 0 ? -12 : 12) * s;
+        i === 0 ? ctx.moveTo(xx, yy) : ctx.lineTo(xx, yy);
+      }
+      ctx.stroke();
+    }
+
+    // Back of our head
+    ctx.fillStyle = "#dc2626";
+    ctx.beginPath();
+    ctx.roundRect(cx - 70 * s, headTop - koPop, 140 * s, 130 * s, 26 * s);
+    ctx.fill();
+    ctx.fillStyle = "#991b1b";
+    ctx.fillRect(cx - 70 * s, headTop - koPop + 46 * s, 140 * s, 12 * s);
+    // Antenna
+    ctx.strokeStyle = "#94a3b8";
+    ctx.lineWidth = 3.5 * s;
+    ctx.beginPath();
+    ctx.moveTo(cx, headTop - koPop);
+    ctx.lineTo(cx, headTop - koPop - 20 * s);
+    ctx.stroke();
+    ctx.fillStyle = "#fbbf24";
+    ctx.beginPath();
+    ctx.arc(cx, headTop - koPop - 24 * s, 5.5 * s, 0, TAU);
+    ctx.fill();
+
+    // Gloves
+    const anchors = {
+      L: { x: cx - 195 * s, y: H - 85 * s },
+      R: { x: cx + 195 * s, y: H - 85 * s },
+    };
+    const blockPos = {
+      L: { x: cx - 62 * s, y: H - 195 * s },
+      R: { x: cx + 62 * s, y: H - 195 * s },
+    };
+    const target = cpuHeadPos();
+    for (const side of ["L", "R"]) {
+      let x, y, r;
+      if (player.punch && player.punch.side === side) {
+        // out fast, back slower
+        const pt = player.punch.t;
+        const p = pt <= JAB_CONTACT ? pt / JAB_CONTACT : 1 - (pt - JAB_CONTACT) / (JAB_DUR - JAB_CONTACT);
+        const e = p * p * (3 - 2 * p); // smoothstep
+        x = lerp(anchors[side].x, target.x + (side === "L" ? -20 : 20) * s, e);
+        y = lerp(anchors[side].y, target.y + 30 * s, e);
+        r = lerp(58 * s, 24 * s, e);
+      } else if (playerBlocking()) {
+        x = blockPos[side].x; y = blockPos[side].y; r = 58 * s;
+      } else {
+        x = anchors[side].x; y = anchors[side].y + bob; r = 58 * s;
+      }
+      ctx.fillStyle = "#ef4444";
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = "#b91c1c";
+      ctx.beginPath();
+      ctx.arc(x, y + r * 0.45, r * 0.62, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,0.28)";
+      ctx.beginPath();
+      ctx.arc(x - r * 0.32, y - r * 0.32, r * 0.3, 0, TAU);
+      ctx.fill();
+    }
+
+    // Block shield hint
+    if (playerBlocking()) {
+      ctx.strokeStyle = "rgba(125, 211, 252, 0.5)";
+      ctx.lineWidth = 4 * s;
+      ctx.beginPath();
+      ctx.arc(cx, H - 170 * s, 135 * s, Math.PI * 1.15, Math.PI * 1.85);
+      ctx.stroke();
+    }
+  }
+
+  function drawHud(s) {
+    const barW = Math.min(W * 0.4, 300), barH = 16, m = 12;
+    const drawBar = (x, hp, color, align) => {
+      ctx.fillStyle = "rgba(255,255,255,0.12)";
+      ctx.beginPath();
+      ctx.roundRect(x, m + 16, barW, barH, 8);
+      ctx.fill();
+      const w = (barW * hp) / MAX_HP;
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.roundRect(align === "right" ? x + barW - w : x, m + 16, w, barH, 8);
+      ctx.fill();
+    };
+    ctx.font = "700 12px -apple-system, sans-serif";
+    ctx.fillStyle = "#f1f5f9";
+    ctx.textBaseline = "alphabetic";
+    ctx.textAlign = "left";
+    ctx.fillText("YOU — RED BOT", m, m + 10);
+    drawBar(m, player.hp, "#ef4444", "left");
+    ctx.textAlign = "right";
+    ctx.fillText(`CPU — BLUE BOT  LV.${cpu.level + 1}`, W - m, m + 10);
+    drawBar(W - m - barW, cpu.hp, "#3b82f6", "right");
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#9aa3b8";
+    ctx.fillText(`STREAK ${record.streak} · BEST ${record.best}`, W / 2, m + 10);
+    ctx.textAlign = "left";
+  }
+
+  function drawBanners(s) {
+    ctx.textAlign = "center";
+    if (state === "fight" && fightT < 900) {
+      const a = fightT < 700 ? 1 : 1 - (fightT - 700) / 200;
+      ctx.fillStyle = `rgba(251, 191, 36, ${a})`;
+      ctx.font = `900 italic ${Math.round(64 * s)}px -apple-system, sans-serif`;
+      ctx.fillText("FIGHT!", W / 2, H * 0.5);
+    }
+    if (state === "ko" && koT > 250) {
+      ctx.fillStyle = "#fbbf24";
+      ctx.strokeStyle = "#7c2d12";
+      ctx.lineWidth = 8 * s;
+      ctx.font = `900 italic ${Math.round(110 * s)}px -apple-system, sans-serif`;
+      ctx.strokeText("KO!", W / 2, H * 0.5);
+      ctx.fillText("KO!", W / 2, H * 0.5);
+    }
+    ctx.textAlign = "left";
+  }
+
+  function draw() {
+    const s = S();
+    ctx.clearRect(0, 0, W, H);
+    ctx.save();
+    if (shakeT > 0) {
+      const k = shakeT / 220;
+      ctx.translate(rand(-1, 1) * shakeMag * k, rand(-1, 1) * shakeMag * k);
+    }
+    drawRing(s);
+    drawCpu(s, now);
+    drawPlayer(s, now);
+    drawCpuIncomingGlove(s);
+    for (const p of particles) {
+      ctx.globalAlpha = 1 - p.t / p.life;
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 3.5 * S(), 0, TAU);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+
+    // Red vignette when we get socked
+    if (player.hurtT > 0) {
+      ctx.fillStyle = `rgba(239, 68, 68, ${0.32 * (player.hurtT / 350)})`;
+      ctx.fillRect(0, 0, W, H);
+    }
+    drawHud(s);
+    drawBanners(s);
+  }
+
+  // ---------- Main loop ----------
+  let lastFrame = 0;
+  function frame(t) {
+    requestAnimationFrame(frame);
+    if (!lastFrame) lastFrame = t;
+    const dt = Math.min(50, t - lastFrame);
+    lastFrame = t;
+    now += dt;
+
+    if (state === "fight") {
+      fightT += dt;
+      if (fightT >= 600) updateCpu(dt); // brief grace period after the bell
+      updatePlayer(dt);
+    } else if (state === "ko") {
+      koT += dt;
+      if (koT > 1900) showResult();
+    }
+    if (shakeT > 0) shakeT -= dt;
+    updateParticles(dt);
+    draw();
+  }
+
+  // ---------- Input: keyboard (macOS Safari) ----------
+  const BLOCK_KEYS = new Set(["s", "arrowdown", " "]);
+
+  window.addEventListener("keydown", (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const key = e.key.toLowerCase();
+    if (["a", "d", "s", "w", "p", " ", "arrowleft", "arrowright", "arrowdown", "arrowup"].includes(key)) {
+      e.preventDefault();
+    }
+    ensureAudio();
+    if (e.repeat) return;
+    if (state === "menu" || state === "result") return startFight();
+    if (state === "paused") return togglePause();
+    if (state !== "fight") return;
+    if (key === "p" || key === "escape") return togglePause();
+    if (key === "a" || key === "arrowleft") throwJab("L");
+    else if (key === "d" || key === "arrowright") throwJab("R");
+    else if (BLOCK_KEYS.has(key)) player.blockHeld = true;
+  });
+
+  window.addEventListener("keyup", (e) => {
+    if (BLOCK_KEYS.has(e.key.toLowerCase())) player.blockHeld = false;
+  });
+
+  window.addEventListener("blur", () => { player.blockHeld = false; });
+
+  // ---------- Input: touch buttons (iOS Safari) ----------
+  function bindButton(id, onDown, onUp) {
+    const el = document.getElementById(id);
+    el.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      ensureAudio();
+      el.classList.add("pressed");
+      onDown();
+    });
+    const release = (e) => {
+      el.classList.remove("pressed");
+      if (onUp) onUp();
+    };
+    el.addEventListener("pointerup", release);
+    el.addEventListener("pointercancel", release);
+    el.addEventListener("pointerleave", release);
+  }
+  bindButton("btn-left", () => {
+    if (state === "menu" || state === "result") return startFight();
+    if (state === "paused") return togglePause();
+    throwJab("L");
+  });
+  bindButton("btn-right", () => {
+    if (state === "menu" || state === "result") return startFight();
+    if (state === "paused") return togglePause();
+    throwJab("R");
+  });
+  bindButton("btn-block", () => {
+    if (state === "menu" || state === "result") return startFight();
+    if (state === "paused") return togglePause();
+    player.blockHeld = true;
+  }, () => { player.blockHeld = false; });
+
+  // Tap the overlay/canvas to start or resume
+  overlay.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    ensureAudio();
+    if (state === "menu" || state === "result") startFight();
+    else if (state === "paused") togglePause();
+  });
+
+  // Keep iOS Safari from scrolling, bouncing, or zooming
+  document.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
+  document.addEventListener("gesturestart", (e) => e.preventDefault());
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden && state === "fight") togglePause();
+    if (document.hidden) player.blockHeld = false;
+  });
+
+  // ---------- Boot ----------
+  window.addEventListener("resize", resize);
+  window.addEventListener("orientationchange", () => setTimeout(resize, 100));
+  resize();
+  showMenu();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
