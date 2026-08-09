@@ -116,6 +116,22 @@
   }
   button:active { background: #34405f; }
   button:disabled { opacity: 0.4; }
+  .winbanner {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    font-size: clamp(36px, 11vmin, 72px);
+    font-weight: 800;
+    color: #fbbf24;
+    text-shadow: 0 3px 12px rgba(0, 0, 0, 0.7);
+    z-index: 6;
+    pointer-events: none;
+    animation: pop 0.5s cubic-bezier(0.2, 2.2, 0.4, 1);
+  }
+  @keyframes pop { from { transform: scale(0.2); opacity: 0; } to { transform: scale(1); opacity: 1; } }
   #overlay {
     position: absolute;
     inset: 0;
@@ -268,7 +284,78 @@
     land:    () => { thud(0.03, 0.15); beep(160, 110, 0.07, "sine", 0.3); },
     capture: () => { thud(0.07, 0.25); beep(110, 60, 0.11, "square", 0.16); },
     promote: () => { beep(523, null, 0.12, "triangle", 0.2); beep(659, null, 0.12, "triangle", 0.2, 0.09); beep(784, null, 0.22, "triangle", 0.22, 0.18); },
+    victory: () => {
+      const run = [[523, 0], [659, 0.14], [784, 0.28], [1047, 0.42], [784, 0.62], [1047, 0.76]];
+      for (const [f, t] of run) beep(f, null, 0.24, "triangle", 0.22, t);
+      beep(1319, null, 0.6, "triangle", 0.22, 0.95);
+      beep(1047, null, 0.6, "sine", 0.12, 0.95);
+    },
   };
+
+  // ---------- Win celebration ----------
+  let banner = null;
+  function showBanner(text) {
+    hideBanner();
+    banner = document.createElement("div");
+    banner.className = "winbanner";
+    banner.textContent = text;
+    document.getElementById("wrap").appendChild(banner);
+  }
+  function hideBanner() {
+    if (banner) { banner.remove(); banner = null; }
+  }
+  function confetti(durMs) {
+    const cv = document.createElement("canvas");
+    cv.style.cssText = "position:fixed;inset:0;pointer-events:none;z-index:50";
+    document.body.appendChild(cv);
+    const cx = cv.getContext("2d");
+    const dpr = window.devicePixelRatio || 1;
+    cv.width = innerWidth * dpr;
+    cv.height = innerHeight * dpr;
+    cx.scale(dpr, dpr);
+    const colors = ["#ef4444", "#f59e0b", "#22c55e", "#3b82f6", "#a855f7", "#ec4899", "#fbbf24"];
+    const bits = Array.from({ length: 160 }, () => ({
+      x: Math.random() * innerWidth,
+      y: -20 - Math.random() * innerHeight * 0.6,
+      w: 6 + Math.random() * 6,
+      h: 8 + Math.random() * 8,
+      vy: 100 + Math.random() * 170,
+      vx: -40 + Math.random() * 80,
+      rot: Math.random() * Math.PI * 2,
+      vr: -5 + Math.random() * 10,
+      sway: Math.random() * Math.PI * 2,
+      color: colors[Math.floor(Math.random() * colors.length)],
+    }));
+    let start = null, last = null;
+    function frame(t) {
+      if (!start) { start = t; last = t; }
+      const dt = Math.min(0.05, (t - last) / 1000);
+      last = t;
+      const elapsed = t - start;
+      cx.clearRect(0, 0, innerWidth, innerHeight);
+      cx.globalAlpha = elapsed > durMs - 600 ? Math.max(0, (durMs - elapsed) / 600) : 1;
+      for (const b of bits) {
+        b.y += b.vy * dt;
+        b.x += (b.vx + Math.sin(b.sway + elapsed / 300) * 30) * dt;
+        b.rot += b.vr * dt;
+        if (b.y > innerHeight + 20) { b.y = -20; b.x = Math.random() * innerWidth; }
+        cx.save();
+        cx.translate(b.x, b.y);
+        cx.rotate(b.rot);
+        cx.fillStyle = b.color;
+        cx.fillRect(-b.w / 2, -b.h / 2, b.w, b.h);
+        cx.restore();
+      }
+      if (elapsed < durMs) requestAnimationFrame(frame);
+      else cv.remove();
+    }
+    requestAnimationFrame(frame);
+  }
+  function celebrate(text) {
+    showBanner(text);
+    sfx.victory();
+    confetti(5000);
+  }
 
   // ---------- Rules ----------
   const inB = (r, c) => r >= 0 && r < 8 && c >= 0 && c < 8;
@@ -413,6 +500,7 @@
   // ---------- Game state ----------
   let board, turn, playerSide, aiSide, clock, thinking, gameOver;
   let animating = false;
+  let endTimer = null;
   let selected = null;        // [r, c]
   let activeMoves = [];       // legal sequences (possibly mid-jump continuations)
   let midJump = false;
@@ -633,14 +721,23 @@
   function endGame(winner) {
     gameOver = true;
     clearGameSave();
-    const msg = winner === 0 ? "Draw — no progress." : winner === playerSide ? "You win! 🏆" : "You lose. 💀";
+    const won = winner === playerSide;
+    const msg = winner === 0 ? "Draw — no progress." : won ? "You win! 🏆" : "You lose. 💀";
     setStatus(msg);
     ovMsg.textContent = msg;
-    overlay.classList.remove("hidden");
     render();
+    // Let the result sink in before offering a new game — with a party if they won
+    if (won) celebrate("You win! 🎉");
+    clearTimeout(endTimer);
+    endTimer = setTimeout(() => {
+      hideBanner();
+      overlay.classList.remove("hidden");
+    }, won ? 5000 : 1600);
   }
 
   function startGame() {
+    clearTimeout(endTimer);
+    hideBanner();
     board = newBoard();
     playerSide = prefs.side;
     aiSide = -prefs.side;
