@@ -150,7 +150,7 @@
   try {
     const p = JSON.parse(localStorage.getItem("checkers-prefs"));
     if (p && typeof p.level === "number") {
-      document.getElementById("checkers-stat").textContent = "Engine level " + (p.level + 1) + " of 8";
+      document.getElementById("checkers-stat").textContent = "Engine level " + (p.level + 1) + " of 10";
     }
   } catch (e) { /* private browsing */ }
 

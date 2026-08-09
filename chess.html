@@ -167,7 +167,7 @@
         <button id="side-b">Play Black ♚</button>
       </div>
       <label for="elo">Engine strength</label>
-      <input type="range" id="elo" min="600" max="2850" step="25" value="1200">
+      <input type="range" id="elo" min="200" max="2850" step="25" value="200">
       <div id="elo-label"></div>
       <button id="start" style="max-width:320px; width:100%">Start Game</button>
     </div>
@@ -196,7 +196,7 @@
   const FILES = "abcdefgh";
 
   // ---------- Preferences ----------
-  let prefs = { elo: 1200, side: "w" };
+  let prefs = { elo: 200, side: "w" }; // default to the gentlest setting
   try {
     const saved = JSON.parse(localStorage.getItem("chess-prefs"));
     if (saved && typeof saved.elo === "number") prefs = saved;
@@ -306,7 +306,13 @@
   }
 
   function moveTimeMs(elo) {
-    return Math.round(150 + ((elo - 600) / 2250) * 850); // 150ms weak -> 1000ms strong
+    return Math.round(Math.max(80, 150 + ((elo - 600) / 2250) * 850)); // 80ms weakest -> 1000ms strongest
+  }
+
+  // Below ~900 Elo the engine can't get weak enough on its own, so we blend in
+  // random legal moves: ~88% random at 200 Elo (a true beginner's opponent), 0% at 900+.
+  function randomMoveChance(elo) {
+    return Math.max(0, Math.min(0.9, (900 - elo) / 800));
   }
 
   // ---------- Game state ----------
@@ -476,6 +482,20 @@
     thinking = true;
     setStatus("Thinking…");
     render();
+    if (Math.random() < randomMoveChance(prefs.elo)) {
+      await new Promise((res) => setTimeout(res, 350 + Math.random() * 400)); // pretend to think
+      const opts = game.moves({ verbose: true });
+      const pick = opts[Math.floor(Math.random() * opts.length)];
+      thinking = false;
+      const made = game.move({ from: pick.from, to: pick.to, promotion: pick.promotion });
+      uciMoves.push(made.from + made.to + (made.promotion || ""));
+      lastMove = { from: made.from, to: made.to };
+      saveGame();
+      animateMade(made, () => {
+        if (!checkGameEnd()) setStatus("Your move");
+      });
+      return;
+    }
     engine.postMessage("position startpos" + (uciMoves.length ? " moves " + uciMoves.join(" ") : ""));
     engine.postMessage("go movetime " + moveTimeMs(prefs.elo));
     const line = await expect((l) => l.startsWith("bestmove"));
@@ -588,6 +608,7 @@
 
   // ---------- Setup UI ----------
   function eloDesc(elo) {
+    if (elo < 450) return "First games — great for kids";
     if (elo < 800) return "Beginner";
     if (elo < 1100) return "Casual";
     if (elo < 1400) return "Club player";

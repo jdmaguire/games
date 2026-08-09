@@ -157,7 +157,7 @@
         <button id="side-b">Play Black</button>
       </div>
       <label for="lvl">Engine strength</label>
-      <input type="range" id="lvl" min="0" max="7" step="1" value="2">
+      <input type="range" id="lvl" min="0" max="9" step="1" value="0">
       <div id="lvl-label"></div>
       <button id="start" style="max-width:320px; width:100%">Start Game</button>
     </div>
@@ -179,16 +179,20 @@
   const CROWN_ROW = { [RED]: 0, [BLK]: 7 };
   const DRAW_PLIES = 80; // plies without a capture or man move -> draw
 
-  // Strength levels: search depth + time budget + score noise (Elo labels are rough)
+  // Strength levels: search depth + time budget + score noise (Elo labels are rough).
+  // `random` is the chance of just playing any legal move — how the lowest levels
+  // stay genuinely beatable for young kids.
   const LEVELS = [
-    { label: "1 — ~700 Elo",  depth: 2,  ms: 80,   noise: 40 },
-    { label: "2 — ~900 Elo",  depth: 3,  ms: 120,  noise: 25 },
-    { label: "3 — ~1100 Elo", depth: 5,  ms: 200,  noise: 15 },
-    { label: "4 — ~1300 Elo", depth: 7,  ms: 320,  noise: 8 },
-    { label: "5 — ~1500 Elo", depth: 9,  ms: 500,  noise: 4 },
-    { label: "6 — ~1700 Elo", depth: 11, ms: 750,  noise: 2 },
-    { label: "7 — ~1900 Elo", depth: 13, ms: 1000, noise: 0 },
-    { label: "8 — ~2100 Elo", depth: 15, ms: 1300, noise: 0 },
+    { label: "1 — first games, great for kids", depth: 1, ms: 60, noise: 200, random: 0.85 },
+    { label: "2 — ~500 Elo",  depth: 2,  ms: 80,   noise: 80, random: 0.45 },
+    { label: "3 — ~700 Elo",  depth: 2,  ms: 80,   noise: 40, random: 0.15 },
+    { label: "4 — ~900 Elo",  depth: 3,  ms: 120,  noise: 25, random: 0 },
+    { label: "5 — ~1100 Elo", depth: 5,  ms: 200,  noise: 15, random: 0 },
+    { label: "6 — ~1300 Elo", depth: 7,  ms: 320,  noise: 8,  random: 0 },
+    { label: "7 — ~1500 Elo", depth: 9,  ms: 500,  noise: 4,  random: 0 },
+    { label: "8 — ~1700 Elo", depth: 11, ms: 750,  noise: 2,  random: 0 },
+    { label: "9 — ~1900 Elo", depth: 13, ms: 1000, noise: 0,  random: 0 },
+    { label: "10 — ~2100 Elo", depth: 15, ms: 1300, noise: 0, random: 0 },
   ];
 
   const boardEl = document.getElementById("board");
@@ -203,7 +207,7 @@
   const btnUndo = document.getElementById("btn-undo");
 
   // ---------- Preferences ----------
-  let prefs = { level: 2, side: RED };
+  let prefs = { level: 0, side: RED }; // default to the gentlest setting
   try {
     const saved = JSON.parse(localStorage.getItem("checkers-prefs"));
     if (saved && typeof saved.level === "number" && (saved.side === RED || saved.side === BLK)) prefs = saved;
@@ -377,6 +381,10 @@
     const { moves } = genMoves(bd, side);
     if (moves.length === 0) return null;
     if (moves.length === 1) return moves[0];
+    // Lowest levels mostly just play something legal, like a young kid would
+    if (Math.random() < (LEVELS[level].random || 0)) {
+      return moves[Math.floor(Math.random() * moves.length)];
+    }
     let scored = moves.map((m) => ({ m, score: 0 }));
     for (let d = 2; d <= maxDepth; d++) {
       const prev = scored.map((e) => ({ m: e.m, score: e.score }));
