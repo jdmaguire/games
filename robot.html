@@ -145,33 +145,49 @@
     head: "#22c55e", arm: "#166534", glove: "#22c55e", eyes: "#bbf7d0", bar: "#22c55e",
   };
   const RARE_SKINS = [
+    // Tan chimp face with a cheeky grin, big round ears, curly tail
     { name: "CHIMP BOT", torso: "#78350f", chest: "#5c2c0c", accent: "#fbbf24",
       head: "#92400e", arm: "#5c2c0c", glove: "#b45309", eyes: "#fde68a", bar: "#b45309",
-      ears: "round", earColor: "#d4a373", muzzle: "#d4a373" },
+      ears: "round", earColor: "#d4a373", muzzle: "#d4a373", facePatch: "#d4a373",
+      beadEyes: "#3f2a1e", nostrils: true, tail: "curl", tailColor: "#92400e" },
+    // Red webbed mask, big white lenses, spider emblem on the chest
     { name: "SPIDER BOT", torso: "#1d4ed8", chest: "#1e3a8a", accent: "#dc2626",
       head: "#dc2626", arm: "#991b1b", glove: "#dc2626", eyes: "#f8fafc", bar: "#dc2626",
-      web: true },
+      web: true, lenses: true, spider: true },
+    // Blue cattle pup: tall two-tone ears, tan muzzle, waggy tail
     { name: "BLUE HEELER", torso: "#6497c9", chest: "#f2d5a8", accent: "#4a7bab",
       head: "#8fb8de", arm: "#4a7bab", glove: "#8fb8de", eyes: "#fef9c3", bar: "#8fb8de",
-      ears: "dog", earColor: "#3f6a99", muzzle: "#f2d5a8" },
+      ears: "dog", earColor: "#4a7bab", earTip: "#2c517a", earInner: "#f2d5a8",
+      headPatch: "#4a7bab", muzzle: "#f2d5a8", bigEyes: true, pupil: "#1f2937",
+      tail: "wag", tailColor: "#4a7bab", tailTip: "#f2d5a8" },
     { name: "RED HEELER", torso: "#d98b52", chest: "#f7e3c3", accent: "#b06a3c",
       head: "#e8a97e", arm: "#b06a3c", glove: "#e8a97e", eyes: "#fef9c3", bar: "#e8a97e",
-      ears: "dog", earColor: "#b5622f", muzzle: "#f7e3c3" },
-    { name: "PUP BOT", torso: "#2563eb", chest: "#1e40af", accent: "#facc15",
-      head: "#b45309", arm: "#1e40af", glove: "#92400e", eyes: "#fde68a", bar: "#b45309",
-      ears: "dog", earColor: "#7c2d12", muzzle: "#d4a373", cap: "#dc2626" },
+      ears: "dog", earColor: "#b06a3c", earTip: "#8a4a26", earInner: "#f7e3c3",
+      headPatch: "#c97b45", muzzle: "#f7e3c3", bigEyes: true, pupil: "#1f2937",
+      tail: "wag", tailColor: "#b06a3c", tailTip: "#f7e3c3" },
+    // Spotted rescue pup: red helmet, floppy ears, paw-print badge
+    { name: "PUP BOT", torso: "#dc2626", chest: "#b91c1c", accent: "#facc15",
+      head: "#f8fafc", arm: "#b91c1c", glove: "#dc2626", eyes: "#7dd3fc", bar: "#dc2626",
+      ears: "floppy", earColor: "#1f2937", spots: "#1f2937", muzzle: "#f8fafc",
+      cap: "#dc2626", bigEyes: true, pupil: "#1f2937", pawBadge: "#facc15",
+      tail: "wag", tailColor: "#f8fafc", tailTip: "#1f2937" },
+    // Blue overalls with gold buttons, letter cap, round nose over the mustache
     { name: "RED PLUMBER", torso: "#1d4ed8", chest: "#1e40af", accent: "#dc2626",
       head: "#e8b98a", arm: "#dc2626", glove: "#f8fafc", eyes: "#7dd3fc", bar: "#dc2626",
-      cap: "#dc2626", mustache: "#3f2a1e" },
+      cap: "#dc2626", capBadge: "M", mustache: "#3f2a1e", nose: "#e8a06b",
+      bigEyes: true, pupil: "#2563eb", buttons: "#facc15" },
     { name: "GREEN PLUMBER", torso: "#1d4ed8", chest: "#1e40af", accent: "#16a34a",
       head: "#e8b98a", arm: "#16a34a", glove: "#f8fafc", eyes: "#7dd3fc", bar: "#22c55e",
-      cap: "#16a34a", mustache: "#2d1f14" },
+      cap: "#16a34a", capBadge: "L", mustache: "#2d1f14", nose: "#e8a06b",
+      bigEyes: true, pupil: "#16a34a", buttons: "#facc15" },
+    // Golden hair under a jeweled crown, pink gown, blue brooch
     { name: "PRINCESS BOT", torso: "#ec4899", chest: "#f472b6", accent: "#38bdf8",
       head: "#f5d0a9", arm: "#ec4899", glove: "#f8fafc", eyes: "#7dd3fc", bar: "#f472b6",
-      crown: "#fbbf24" },
-    { name: "MUSHROOM BOT", torso: "#3b82f6", chest: "#f5e5d0", accent: "#fbbf24",
+      crown: "#fbbf24", mane: "#fcd34d", bigEyes: true, pupil: "#2563eb", brooch: "#38bdf8" },
+    // Little guy under a giant spotted mushroom dome, blue vest
+    { name: "MUSHROOM BOT", torso: "#1d4ed8", chest: "#1e40af", accent: "#fbbf24",
       head: "#f5e5d0", arm: "#3b82f6", glove: "#f8fafc", eyes: "#e0f2fe", bar: "#f87171",
-      cap: "#f8fafc", capSpots: "#dc2626" },
+      dome: "#f8fafc", domeSpots: "#dc2626", bigEyes: true, pupil: "#1f2937" },
   ];
   // 1% boss fight: a gigantic red dragon with more HP, harder claws, and a tail attack
   const SKIN_DRAGON = {
@@ -637,6 +653,18 @@
     ctx.fillRect(postR - 6 * s, backY - 86 * s, 12 * s, 86 * s);
   }
 
+  // Knocked-silly X eyes, shared by every face style
+  function drawXEyes(cx, cy, s) {
+    ctx.strokeStyle = "#fbbf24";
+    ctx.lineWidth = 3 * s;
+    for (const ex of [-18, 18]) {
+      ctx.beginPath();
+      ctx.moveTo(cx + (ex - 6) * s, cy - 6 * s); ctx.lineTo(cx + (ex + 6) * s, cy + 6 * s);
+      ctx.moveTo(cx + (ex + 6) * s, cy - 6 * s); ctx.lineTo(cx + (ex - 6) * s, cy + 6 * s);
+      ctx.stroke();
+    }
+  }
+
   function drawCpu(s, t) {
     const k = cpu.skin;
     const cx = W / 2;
@@ -658,6 +686,38 @@
     ctx.fill();
     ctx.fillRect(cx - 26 * s, shoulderY + 100 * s, 52 * s, H * 0.60 - (shoulderY + 100 * s));
 
+    // Tail pokes out from behind the torso
+    if (k.tail === "wag") {
+      const wag = Math.sin(t * 0.008) * 0.25;
+      ctx.save();
+      ctx.translate(cx + 58 * s, shoulderY + 80 * s);
+      ctx.rotate(-0.8 + wag);
+      ctx.strokeStyle = k.tailColor;
+      ctx.lineWidth = 14 * s;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(48 * s, 0);
+      ctx.stroke();
+      ctx.strokeStyle = k.tailTip; // lighter tip
+      ctx.lineWidth = 10 * s;
+      ctx.beginPath();
+      ctx.moveTo(36 * s, 0);
+      ctx.lineTo(50 * s, 0);
+      ctx.stroke();
+      ctx.restore();
+    } else if (k.tail === "curl") {
+      ctx.strokeStyle = k.tailColor;
+      ctx.lineWidth = 9 * s;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.arc(cx - 80 * s, shoulderY + 78 * s, 26 * s, 0.3, Math.PI * 1.45);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(cx - 80 * s, shoulderY + 60 * s, 10 * s, Math.PI * 0.5, Math.PI * 2.2);
+      ctx.stroke();
+    }
+
     // Torso
     ctx.fillStyle = k.torso;
     ctx.beginPath();
@@ -669,8 +729,65 @@
     ctx.fill();
     ctx.fillStyle = k.chest; // chest plate
     ctx.fillRect(cx - 34 * s, shoulderY + 18 * s, 68 * s, 46 * s);
-    ctx.fillStyle = k.accent;
-    ctx.fillRect(cx - 10 * s, shoulderY + 30 * s, 20 * s, 20 * s);
+    const chestY = shoulderY + 41 * s;
+    if (k.spider) {
+      // Black spider emblem: legs first, body over them
+      ctx.strokeStyle = "#0f172a";
+      ctx.lineWidth = 2.5 * s;
+      ctx.lineCap = "round";
+      for (const sign of [-1, 1]) {
+        for (const [dy, ex, ey] of [[-5, 17, -15], [-1, 19, -4], [3, 18, 7], [6, 14, 16]]) {
+          ctx.beginPath();
+          ctx.moveTo(cx + sign * 3 * s, chestY + dy * s);
+          ctx.lineTo(cx + sign * ex * s, chestY + ey * s);
+          ctx.stroke();
+        }
+      }
+      ctx.fillStyle = "#0f172a";
+      ctx.beginPath();
+      ctx.ellipse(cx, chestY + 3 * s, 4.5 * s, 9 * s, 0, 0, TAU);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(cx, chestY - 9 * s, 3.5 * s, 0, TAU);
+      ctx.fill();
+    } else if (k.pawBadge) {
+      // Round rescue badge with a paw print
+      ctx.fillStyle = k.pawBadge;
+      ctx.beginPath();
+      ctx.arc(cx, chestY, 16 * s, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = "#7c2d12";
+      ctx.beginPath();
+      ctx.ellipse(cx, chestY + 4 * s, 6 * s, 5 * s, 0, 0, TAU);
+      ctx.fill();
+      for (const [dx, dy] of [[-7, -4], [0, -7], [7, -4]]) {
+        ctx.beginPath();
+        ctx.arc(cx + dx * s, chestY + dy * s, 2.8 * s, 0, TAU);
+        ctx.fill();
+      }
+    } else if (k.brooch) {
+      // Jewel brooch on the gown
+      ctx.fillStyle = k.brooch;
+      ctx.beginPath();
+      ctx.ellipse(cx, chestY, 9 * s, 11 * s, 0, 0, TAU);
+      ctx.fill();
+      ctx.strokeStyle = "#fbbf24";
+      ctx.lineWidth = 2.5 * s;
+      ctx.beginPath();
+      ctx.ellipse(cx, chestY, 9 * s, 11 * s, 0, 0, TAU);
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = k.accent;
+      ctx.fillRect(cx - 10 * s, shoulderY + 30 * s, 20 * s, 20 * s);
+    }
+    if (k.buttons) { // overall buttons at the strap corners
+      ctx.fillStyle = k.buttons;
+      for (const sign of [-1, 1]) {
+        ctx.beginPath();
+        ctx.arc(cx + sign * 25 * s, shoulderY + 25 * s, 5 * s, 0, TAU);
+        ctx.fill();
+      }
+    }
 
     // Neck / spring
     if (koPop > 0) {
@@ -689,6 +806,14 @@
       ctx.fillRect(cx - 14 * s, headY + 28 * s, 28 * s, 22 * s);
     }
 
+    // Hair mane frames the head (drawn first, so the face sits on top)
+    if (k.mane) {
+      ctx.fillStyle = k.mane;
+      ctx.beginPath();
+      ctx.roundRect(cx - 62 * s, hy - 44 * s, 124 * s, 96 * s, 36 * s);
+      ctx.fill();
+    }
+
     // Ears sit behind the head, so draw them first
     if (k.ears === "round") {
       for (const sign of [-1, 1]) {
@@ -702,14 +827,45 @@
         ctx.fill();
       }
     } else if (k.ears === "dog") {
-      ctx.fillStyle = k.earColor;
+      // Tall pointed heeler ears, two-tone with darker tips
       for (const sign of [-1, 1]) {
+        ctx.fillStyle = k.earColor;
         ctx.beginPath();
-        ctx.moveTo(cx + sign * 40 * s, hy - 30 * s);
-        ctx.lineTo(cx + sign * 56 * s, hy - 62 * s);
-        ctx.lineTo(cx + sign * 16 * s, hy - 34 * s);
+        ctx.moveTo(cx + sign * 12 * s, hy - 26 * s);
+        ctx.lineTo(cx + sign * 46 * s, hy - 74 * s);
+        ctx.lineTo(cx + sign * 52 * s, hy - 28 * s);
         ctx.closePath();
         ctx.fill();
+        if (k.earInner) {
+          ctx.fillStyle = k.earInner;
+          ctx.beginPath();
+          ctx.moveTo(cx + sign * 26 * s, hy - 34 * s);
+          ctx.lineTo(cx + sign * 43 * s, hy - 58 * s);
+          ctx.lineTo(cx + sign * 46 * s, hy - 34 * s);
+          ctx.closePath();
+          ctx.fill();
+        }
+        if (k.earTip) {
+          ctx.fillStyle = k.earTip;
+          ctx.beginPath();
+          ctx.moveTo(cx + sign * 46 * s, hy - 74 * s);
+          ctx.lineTo(cx + sign * 32 * s, hy - 55 * s);
+          ctx.lineTo(cx + sign * 48 * s, hy - 56 * s);
+          ctx.closePath();
+          ctx.fill();
+        }
+      }
+    } else if (k.ears === "floppy") {
+      // Droopy pup ears hanging beside the helmet
+      ctx.fillStyle = k.earColor;
+      for (const sign of [-1, 1]) {
+        ctx.save();
+        ctx.translate(cx + sign * 50 * s, hy - 2 * s);
+        ctx.rotate(sign * 0.35);
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 13 * s, 27 * s, 0, 0, TAU);
+        ctx.fill();
+        ctx.restore();
       }
     }
 
@@ -740,36 +896,95 @@
       }
       ctx.restore();
     }
-    // Antenna
-    ctx.strokeStyle = "#94a3b8";
-    ctx.lineWidth = 3 * s;
-    ctx.beginPath();
-    ctx.moveTo(cx, hy - 34 * s);
-    ctx.lineTo(cx, hy - 52 * s);
-    ctx.stroke();
-    ctx.fillStyle = "#f87171";
-    ctx.beginPath();
-    ctx.arc(cx, hy - 55 * s, 5 * s, 0, TAU);
-    ctx.fill();
-    // Cap (rescue pup, plumbers, mushroom dome)
+    // Fur markings, clipped to the head (heeler crown patch, dalmatian spots)
+    if (k.headPatch || k.spots) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.roundRect(cx - 48 * s, hy - 34 * s, 96 * s, 70 * s, 16 * s);
+      ctx.clip();
+      if (k.headPatch) {
+        ctx.fillStyle = k.headPatch;
+        ctx.beginPath();
+        ctx.ellipse(cx, hy - 32 * s, 46 * s, 16 * s, 0, 0, TAU);
+        ctx.fill();
+      }
+      if (k.spots) {
+        ctx.fillStyle = k.spots;
+        for (const [dx, dy, rr] of [[-30, -18, 8], [24, -24, 7], [38, 8, 9], [-42, 14, 7]]) {
+          ctx.beginPath();
+          ctx.arc(cx + dx * s, hy + dy * s, rr * s, 0, TAU);
+          ctx.fill();
+        }
+      }
+      ctx.restore();
+    }
+    // Chimp face patch: two joined light ovals around the eyes
+    if (k.facePatch) {
+      ctx.fillStyle = k.facePatch;
+      for (const sign of [-1, 1]) {
+        ctx.beginPath();
+        ctx.ellipse(cx + sign * 18 * s, hy - 4 * s, 21 * s, 19 * s, 0, 0, TAU);
+        ctx.fill();
+      }
+    }
+    // Antenna (skipped when headgear swallows it)
+    if (!k.dome && !k.crown) {
+      ctx.strokeStyle = "#94a3b8";
+      ctx.lineWidth = 3 * s;
+      ctx.beginPath();
+      ctx.moveTo(cx, hy - 34 * s);
+      ctx.lineTo(cx, hy - 52 * s);
+      ctx.stroke();
+      ctx.fillStyle = "#f87171";
+      ctx.beginPath();
+      ctx.arc(cx, hy - 55 * s, 5 * s, 0, TAU);
+      ctx.fill();
+    }
+    // Cap (rescue-pup helmet, plumber caps)
     if (k.cap) {
       ctx.fillStyle = k.cap;
+      ctx.beginPath();
+      ctx.ellipse(cx, hy - 40 * s, 37 * s, 15 * s, 0, 0, TAU); // rounded top
+      ctx.fill();
       ctx.beginPath();
       ctx.roundRect(cx - 40 * s, hy - 44 * s, 80 * s, 18 * s, 8 * s);
       ctx.fill();
       ctx.beginPath();
-      ctx.ellipse(cx, hy - 27 * s, 52 * s, 7 * s, 0, 0, TAU);
+      ctx.ellipse(cx, hy - 27 * s, 52 * s, 7 * s, 0, 0, TAU); // brim
       ctx.fill();
-      if (k.capSpots) {
-        ctx.fillStyle = k.capSpots;
-        for (const [dx, rr] of [[-24, 5], [0, 6.5], [24, 5]]) {
-          ctx.beginPath();
-          ctx.arc(cx + dx * s, hy - 35 * s, rr * s, 0, TAU);
-          ctx.fill();
-        }
+      if (k.capBadge) { // white disc with the big letter
+        ctx.save();
+        ctx.fillStyle = "#f8fafc";
+        ctx.beginPath();
+        ctx.arc(cx, hy - 38 * s, 11 * s, 0, TAU);
+        ctx.fill();
+        ctx.fillStyle = k.cap;
+        ctx.font = `800 ${Math.round(15 * s)}px -apple-system, sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(k.capBadge, cx, hy - 37 * s);
+        ctx.restore();
       }
     }
-    // Crown
+    // Giant mushroom dome with spots
+    if (k.dome) {
+      ctx.fillStyle = k.dome;
+      ctx.beginPath();
+      ctx.ellipse(cx, hy - 24 * s, 64 * s, 36 * s, 0, 0, TAU);
+      ctx.fill();
+      ctx.save();
+      ctx.beginPath();
+      ctx.ellipse(cx, hy - 24 * s, 64 * s, 36 * s, 0, 0, TAU);
+      ctx.clip();
+      ctx.fillStyle = k.domeSpots;
+      for (const [dx, dy, rr] of [[-42, -22, 14], [2, -44, 16], [44, -22, 14], [0, -6, 11]]) {
+        ctx.beginPath();
+        ctx.arc(cx + dx * s, hy + dy * s, rr * s, 0, TAU);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+    // Crown with jewels
     if (k.crown) {
       ctx.fillStyle = k.crown;
       ctx.beginPath();
@@ -782,25 +997,84 @@
       ctx.lineTo(cx + 26 * s, hy - 34 * s);
       ctx.closePath();
       ctx.fill();
-    }
-    // Visor + eyes
-    ctx.fillStyle = "#0f172a";
-    ctx.beginPath();
-    ctx.roundRect(cx - 36 * s, hy - 14 * s, 72 * s, 22 * s, 8 * s);
-    ctx.fill();
-    if (cpu.st === "stunned" || (state === "ko" && winner === "player")) {
-      ctx.strokeStyle = "#fbbf24";
-      ctx.lineWidth = 3 * s;
-      for (const ex of [-18, 18]) {
+      for (const [dx, col] of [[-14, "#dc2626"], [0, "#3b82f6"], [14, "#dc2626"]]) {
+        ctx.fillStyle = col;
         ctx.beginPath();
-        ctx.moveTo(cx + (ex - 6) * s, hy - 9 * s); ctx.lineTo(cx + (ex + 6) * s, hy + 3 * s);
-        ctx.moveTo(cx + (ex + 6) * s, hy - 9 * s); ctx.lineTo(cx + (ex - 6) * s, hy + 3 * s);
+        ctx.arc(cx + dx * s, hy - 39 * s, 3 * s, 0, TAU);
+        ctx.fill();
+      }
+    }
+    // Face: cartoon eyes, bead eyes, hero lenses, or the classic robot visor
+    const zonked = cpu.st === "stunned" || (state === "ko" && winner === "player");
+    const angry = cpu.st === "windup" || cpu.st === "punch";
+    if (k.bigEyes) {
+      // Big white cartoon eyes with round pupils (red + eyebrows when attacking)
+      const eyeY = hy + (k.dome ? 20 : -3) * s;
+      const ery = (k.dome ? 10 : 14) * s;
+      for (const sign of [-1, 1]) {
+        const ex = cx + sign * 20 * s;
+        ctx.fillStyle = "#f8fafc";
+        ctx.beginPath();
+        ctx.ellipse(ex, eyeY, 12 * s, ery, 0, 0, TAU);
+        ctx.fill();
+        if (!zonked) {
+          ctx.fillStyle = angry ? "#dc2626" : (k.pupil || "#1f2937");
+          ctx.beginPath();
+          ctx.arc(ex, eyeY + ery * 0.25, 5 * s, 0, TAU);
+          ctx.fill();
+        }
+      }
+      if (angry && !zonked) {
+        ctx.strokeStyle = "#1f2937";
+        ctx.lineWidth = 4 * s;
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(cx - 32 * s, eyeY - ery - 8 * s); ctx.lineTo(cx - 8 * s, eyeY - ery + 2 * s);
+        ctx.moveTo(cx + 32 * s, eyeY - ery - 8 * s); ctx.lineTo(cx + 8 * s, eyeY - ery + 2 * s);
         ctx.stroke();
       }
+      if (zonked) drawXEyes(cx, eyeY, s);
+    } else if (k.beadEyes) {
+      // Small dark chimp eyes on the face patch
+      if (zonked) {
+        drawXEyes(cx, hy - 5 * s, s);
+      } else {
+        ctx.fillStyle = angry ? "#dc2626" : k.beadEyes;
+        for (const sign of [-1, 1]) {
+          ctx.beginPath();
+          ctx.arc(cx + sign * 18 * s, hy - 5 * s, 6 * s, 0, TAU);
+          ctx.fill();
+        }
+      }
+    } else if (k.lenses) {
+      // Big white angled hero lenses with dark outlines
+      for (const sign of [-1, 1]) {
+        ctx.save();
+        ctx.translate(cx + sign * 22 * s, hy - 2 * s);
+        ctx.rotate(sign * -0.35);
+        ctx.fillStyle = angry ? "#fecaca" : "#f8fafc";
+        ctx.strokeStyle = "#0f172a";
+        ctx.lineWidth = 3 * s;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 17 * s, 10 * s, 0, 0, TAU);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      }
+      if (zonked) drawXEyes(cx, hy - 2 * s, s);
     } else {
-      ctx.fillStyle = cpu.st === "windup" || cpu.st === "punch" ? "#fb7185" : k.eyes;
-      ctx.fillRect(cx - 24 * s, hy - 9 * s, 12 * s, 12 * s);
-      ctx.fillRect(cx + 12 * s, hy - 9 * s, 12 * s, 12 * s);
+      // Classic robot visor + square eyes
+      ctx.fillStyle = "#0f172a";
+      ctx.beginPath();
+      ctx.roundRect(cx - 36 * s, hy - 14 * s, 72 * s, 22 * s, 8 * s);
+      ctx.fill();
+      if (zonked) {
+        drawXEyes(cx, hy - 3 * s, s);
+      } else {
+        ctx.fillStyle = angry ? "#fb7185" : k.eyes;
+        ctx.fillRect(cx - 24 * s, hy - 9 * s, 12 * s, 12 * s);
+        ctx.fillRect(cx + 12 * s, hy - 9 * s, 12 * s, 12 * s);
+      }
     }
     // Mustache
     if (k.mustache) {
@@ -809,16 +1083,37 @@
       ctx.roundRect(cx - 24 * s, hy + 11 * s, 48 * s, 11 * s, 5.5 * s);
       ctx.fill();
     }
-    // Muzzle + nose
+    // Big round nose sits over the mustache
+    if (k.nose) {
+      ctx.fillStyle = k.nose;
+      ctx.beginPath();
+      ctx.arc(cx, hy + 6 * s, 9 * s, 0, TAU);
+      ctx.fill();
+    }
+    // Muzzle: chimp gets nostrils + grin, pups get the classic dog nose
     if (k.muzzle) {
       ctx.fillStyle = k.muzzle;
       ctx.beginPath();
       ctx.roundRect(cx - 26 * s, hy + 12 * s, 52 * s, 22 * s, 10 * s);
       ctx.fill();
-      ctx.fillStyle = "#1f2937";
-      ctx.beginPath();
-      ctx.ellipse(cx, hy + 18 * s, 8 * s, 5 * s, 0, 0, TAU);
-      ctx.fill();
+      if (k.nostrils) {
+        ctx.fillStyle = "#3f2a1e";
+        for (const sign of [-1, 1]) {
+          ctx.beginPath();
+          ctx.arc(cx + sign * 7 * s, hy + 19 * s, 2.5 * s, 0, TAU);
+          ctx.fill();
+        }
+        ctx.strokeStyle = "#3f2a1e";
+        ctx.lineWidth = 2.5 * s;
+        ctx.beginPath();
+        ctx.arc(cx, hy + 23 * s, 8 * s, Math.PI * 0.15, Math.PI * 0.85);
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = "#1f2937";
+        ctx.beginPath();
+        ctx.ellipse(cx, hy + 18 * s, 8 * s, 5 * s, 0, 0, TAU);
+        ctx.fill();
+      }
     }
 
     // Stun stars
