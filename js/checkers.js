@@ -61,43 +61,8 @@
     try { localStorage.removeItem("checkers-game"); } catch (e) { /* private browsing */ }
   }
 
-  // ---------- Audio (tiny WebAudio synth; unlocked on first user gesture) ----------
-  let AC = null;
-  function ensureAudio() {
-    try {
-      if (!AC) AC = new (window.AudioContext || window.webkitAudioContext)();
-      if (AC.state === "suspended") AC.resume();
-    } catch (e) { AC = null; }
-  }
-  function beep(f, f2, dur, type, vol, when) {
-    if (!AC) return;
-    try {
-      const t0 = AC.currentTime + (when || 0);
-      const o = AC.createOscillator(), g = AC.createGain();
-      o.type = type;
-      o.frequency.setValueAtTime(f, t0);
-      if (f2) o.frequency.exponentialRampToValueAtTime(f2, t0 + dur);
-      g.gain.setValueAtTime(vol, t0);
-      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-      o.connect(g).connect(AC.destination);
-      o.start(t0);
-      o.stop(t0 + dur + 0.05);
-    } catch (e) { /* audio is best-effort */ }
-  }
-  function thud(dur, vol) {
-    if (!AC) return;
-    try {
-      const n = Math.floor(AC.sampleRate * dur);
-      const buf = AC.createBuffer(1, n, AC.sampleRate);
-      const d = buf.getChannelData(0);
-      for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
-      const src = AC.createBufferSource(), g = AC.createGain();
-      src.buffer = buf;
-      g.gain.value = vol;
-      src.connect(g).connect(AC.destination);
-      src.start();
-    } catch (e) { /* audio is best-effort */ }
-  }
+  // ---------- Audio (synth lives in js/shared/audio.js; unlocked on first user gesture) ----------
+  const { ensureAudio, beep, thud } = window.GameAudio;
   const sfx = {
     land:    () => { thud(0.03, 0.15); beep(160, 110, 0.07, "sine", 0.3); },
     capture: () => { thud(0.07, 0.25); beep(110, 60, 0.11, "square", 0.16); },
@@ -110,65 +75,8 @@
     },
   };
 
-  // ---------- Win celebration ----------
-  let banner = null;
-  function showBanner(text) {
-    hideBanner();
-    banner = document.createElement("div");
-    banner.className = "winbanner";
-    banner.textContent = text;
-    document.getElementById("wrap").appendChild(banner);
-  }
-  function hideBanner() {
-    if (banner) { banner.remove(); banner = null; }
-  }
-  function confetti(durMs) {
-    const cv = document.createElement("canvas");
-    cv.style.cssText = "position:fixed;inset:0;pointer-events:none;z-index:50";
-    document.body.appendChild(cv);
-    const cx = cv.getContext("2d");
-    const dpr = window.devicePixelRatio || 1;
-    cv.width = innerWidth * dpr;
-    cv.height = innerHeight * dpr;
-    cx.scale(dpr, dpr);
-    const colors = ["#ef4444", "#f59e0b", "#22c55e", "#3b82f6", "#a855f7", "#ec4899", "#fbbf24"];
-    const bits = Array.from({ length: 160 }, () => ({
-      x: Math.random() * innerWidth,
-      y: -20 - Math.random() * innerHeight * 0.6,
-      w: 6 + Math.random() * 6,
-      h: 8 + Math.random() * 8,
-      vy: 100 + Math.random() * 170,
-      vx: -40 + Math.random() * 80,
-      rot: Math.random() * Math.PI * 2,
-      vr: -5 + Math.random() * 10,
-      sway: Math.random() * Math.PI * 2,
-      color: colors[Math.floor(Math.random() * colors.length)],
-    }));
-    let start = null, last = null;
-    function frame(t) {
-      if (!start) { start = t; last = t; }
-      const dt = Math.min(0.05, (t - last) / 1000);
-      last = t;
-      const elapsed = t - start;
-      cx.clearRect(0, 0, innerWidth, innerHeight);
-      cx.globalAlpha = elapsed > durMs - 600 ? Math.max(0, (durMs - elapsed) / 600) : 1;
-      for (const b of bits) {
-        b.y += b.vy * dt;
-        b.x += (b.vx + Math.sin(b.sway + elapsed / 300) * 30) * dt;
-        b.rot += b.vr * dt;
-        if (b.y > innerHeight + 20) { b.y = -20; b.x = Math.random() * innerWidth; }
-        cx.save();
-        cx.translate(b.x, b.y);
-        cx.rotate(b.rot);
-        cx.fillStyle = b.color;
-        cx.fillRect(-b.w / 2, -b.h / 2, b.w, b.h);
-        cx.restore();
-      }
-      if (elapsed < durMs) requestAnimationFrame(frame);
-      else cv.remove();
-    }
-    requestAnimationFrame(frame);
-  }
+  // ---------- Win celebration (banner + confetti live in js/shared/celebrate.js) ----------
+  const { showBanner, hideBanner, confetti } = window.GameCelebrate;
   function celebrate(text) {
     showBanner(text);
     sfx.victory();

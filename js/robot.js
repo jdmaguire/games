@@ -118,43 +118,8 @@
   const isTouch = window.matchMedia("(pointer: coarse)").matches || "ontouchstart" in window;
   if (isTouch) document.body.classList.add("touch");
 
-  // ---------- Audio (tiny WebAudio synth; unlocked on first user gesture) ----------
-  let AC = null;
-  function ensureAudio() {
-    try {
-      if (!AC) AC = new (window.AudioContext || window.webkitAudioContext)();
-      if (AC.state === "suspended") AC.resume();
-    } catch (e) { AC = null; }
-  }
-  function beep(f, f2, dur, type, vol, when) {
-    if (!AC) return;
-    try {
-      const t0 = AC.currentTime + (when || 0);
-      const o = AC.createOscillator(), g = AC.createGain();
-      o.type = type;
-      o.frequency.setValueAtTime(f, t0);
-      if (f2) o.frequency.exponentialRampToValueAtTime(f2, t0 + dur);
-      g.gain.setValueAtTime(vol, t0);
-      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-      o.connect(g).connect(AC.destination);
-      o.start(t0);
-      o.stop(t0 + dur + 0.05);
-    } catch (e) { /* audio is best-effort */ }
-  }
-  function thud(dur, vol) {
-    if (!AC) return;
-    try {
-      const n = Math.floor(AC.sampleRate * dur);
-      const buf = AC.createBuffer(1, n, AC.sampleRate);
-      const d = buf.getChannelData(0);
-      for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
-      const src = AC.createBufferSource(), g = AC.createGain();
-      src.buffer = buf;
-      g.gain.value = vol;
-      src.connect(g).connect(AC.destination);
-      src.start();
-    } catch (e) { /* audio is best-effort */ }
-  }
+  // ---------- Audio (synth lives in js/shared/audio.js; unlocked on first user gesture) ----------
+  const { ensureAudio, beep, thud } = window.GameAudio;
   const sfx = {
     hit:   () => { thud(0.09, 0.3); beep(130, 55, 0.12, "square", 0.22); },
     clang: () => { beep(620, 240, 0.18, "square", 0.13); beep(930, 400, 0.12, "triangle", 0.1); },
