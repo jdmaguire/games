@@ -15,6 +15,9 @@
     --light-sq: #f0d9b5;
     --dark-sq: #b58863;
     --accent: #fbbf24;
+    /* The vh term keeps the board (plus header, player rows and controls) inside
+       short/wide windows; on phones the vmin term still wins. */
+    --board: min(94vmin, 560px, calc(100vh - 210px));
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body {
@@ -48,7 +51,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    width: min(94vmin, 560px);
+    width: var(--board);
     gap: 10px;
   }
   header a { color: var(--muted); text-decoration: none; font-size: 14px; white-space: nowrap; }
@@ -56,7 +59,7 @@
   #wrap { position: relative; }
   #board {
     position: relative;
-    width: min(94vmin, 560px);
+    width: var(--board);
     aspect-ratio: 1;
     display: grid;
     grid-template-columns: repeat(8, 1fr);
@@ -73,7 +76,7 @@
     align-items: center;
     justify-content: center;
     pointer-events: none;
-    font-size: calc(min(94vmin, 560px) / 8 * 0.88);
+    font-size: calc(var(--board) / 8 * 0.88);
     line-height: 1;
     transform: scale(1.15);
     filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.5));
@@ -86,7 +89,7 @@
     align-items: center;
     justify-content: center;
     pointer-events: none;
-    font-size: calc(min(94vmin, 560px) / 8 * 0.88);
+    font-size: calc(var(--board) / 8 * 0.88);
     line-height: 1;
     transition: transform 0.18s ease;
     will-change: transform;
@@ -96,7 +99,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: calc(min(94vmin, 560px) / 8 * 0.88);
+    font-size: calc(var(--board) / 8 * 0.88);
     line-height: 1;
     cursor: pointer;
   }
@@ -118,11 +121,20 @@
     position: absolute;
     inset: 6%;
     border-radius: 50%;
-    border: calc(min(94vmin, 560px) / 8 * 0.09) solid rgba(15, 23, 42, 0.35);
+    border: calc(var(--board) / 8 * 0.09) solid rgba(15, 23, 42, 0.35);
   }
   .pc.w { color: #fafafa; text-shadow: 0 1px 2px rgba(0,0,0,0.9), 0 0 1px #000; }
   .pc.b { color: #1c1c1c; text-shadow: 0 1px 1px rgba(255,255,255,0.25); }
-  #controls { display: flex; gap: 10px; width: min(94vmin, 560px); }
+  /* Player rows: name with the running material count underneath, lichess-style */
+  .player { display: flex; flex-direction: column; gap: 3px; width: var(--board); }
+  .player .name { display: flex; align-items: center; gap: 5px; font-size: 14px; font-weight: 700; }
+  .player .name .sub { color: var(--muted); font-weight: 600; font-size: 12px; }
+  .player .material { display: flex; align-items: center; min-height: 17px; font-size: 15px; line-height: 1; }
+  .player .material .tk + .tk { margin-left: -4px; } /* captures stack, so long lists still fit */
+  .player .material .adv { margin-left: 6px; font-size: 12px; font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .chip.w, .tk.w { color: #e8edf5; }
+  .chip.b, .tk.b { color: #7b8798; } /* board black is near-black — too dark on the page bg */
+  #controls { display: flex; gap: 10px; width: var(--board); }
   button {
     flex: 1;
     padding: 12px;
@@ -186,6 +198,10 @@
     <a href="index.html">← Games</a>
     <div id="status"></div>
   </header>
+  <div class="player" id="p-top">
+    <div class="name" id="top-name"></div>
+    <div class="material" id="top-mat"></div>
+  </div>
   <div id="wrap">
     <div id="board"></div>
     <div id="promo"></div>
@@ -201,6 +217,10 @@
       <div id="elo-label"></div>
       <button id="start" style="max-width:320px; width:100%">Start Game</button>
     </div>
+  </div>
+  <div class="player" id="p-bot">
+    <div class="name" id="bot-name"></div>
+    <div class="material" id="bot-mat"></div>
   </div>
   <div id="controls">
     <button id="btn-new">New Game</button>
@@ -221,8 +241,13 @@
   const sideB = document.getElementById("side-b");
   const btnNew = document.getElementById("btn-new");
   const btnUndo = document.getElementById("btn-undo");
+  const topName = document.getElementById("top-name");
+  const botName = document.getElementById("bot-name");
+  const topMat = document.getElementById("top-mat");
+  const botMat = document.getElementById("bot-mat");
 
   const GLYPH = { k: "♚", q: "♛", r: "♜", b: "♝", n: "♞", p: "♟" };
+  const VALUE = { q: 9, r: 5, b: 3, n: 3, p: 1 };
   const FILES = "abcdefgh";
 
   // ---------- Preferences ----------
@@ -446,6 +471,7 @@
         squares[sq] = div;
       }
     }
+    renderNames(playerSide);
     render();
   }
 
@@ -475,9 +501,55 @@
       div.classList.toggle("cap", !!target && !!pos[sq]);
     }
     btnUndo.disabled = thinking || animating || gameOver || game.turn() !== playerSide || uciMoves.length < 2;
+    renderMaterial();
   }
 
   function setStatus(text) { statusEl.textContent = text; }
+
+  // ---------- Material counter ----------
+  // Both the captured glyphs and the points come from the same per-type surplus
+  // on the board, so a promotion reads consistently (the promoter "loses" a pawn
+  // and shows an extra queen) instead of the two disagreeing.
+  function materialDiff() {
+    const count = { w: {}, b: {} };
+    for (const row of game.board()) {
+      for (const cell of row) {
+        if (cell && cell.type !== "k") count[cell.color][cell.type] = (count[cell.color][cell.type] || 0) + 1;
+      }
+    }
+    const taken = { w: [], b: [] }; // taken[side] = the opponent pieces that side is up
+    let score = 0;                  // positive = white ahead
+    for (const t of ["q", "r", "b", "n", "p"]) {
+      const d = (count.w[t] || 0) - (count.b[t] || 0);
+      score += d * VALUE[t];
+      const side = d > 0 ? "w" : "b";
+      for (let i = 0; i < Math.abs(d); i++) taken[side].push(t);
+    }
+    return { taken, score };
+  }
+
+  function paintMaterial(el, types, net, pieceColor) {
+    el.innerHTML = types.map((t) => `<span class="tk ${pieceColor}">${GLYPH[t]}︎</span>`).join("") +
+      (net > 0 ? `<span class="adv">+${net}</span>` : "");
+  }
+
+  function renderMaterial() {
+    const opp = playerSide === "w" ? "b" : "w";
+    const { taken, score } = materialDiff();
+    const mine = playerSide === "w" ? score : -score;
+    paintMaterial(botMat, taken[playerSide], mine, opp);
+    paintMaterial(topMat, taken[opp], -mine, playerSide);
+  }
+
+  // `side` is the colour shown on the bottom row: the live game's side once a game
+  // is running, otherwise whatever is picked in the menu.
+  function renderNames(side) {
+    const opp = side === "w" ? "b" : "w";
+    botName.innerHTML = `<span class="chip ${side}">${GLYPH.k}︎</span>You` +
+      `<span class="sub">${side === "w" ? "White" : "Black"}</span>`;
+    topName.innerHTML = `<span class="chip ${opp}">${GLYPH.k}︎</span>Stockfish` +
+      `<span class="sub">${prefs.elo} Elo</span>`;
+  }
 
   // ---------- Player input ----------
   function onSquareTap(sq) {
@@ -819,11 +891,13 @@
   eloSlider.addEventListener("input", () => {
     prefs.elo = parseInt(eloSlider.value, 10);
     refreshEloLabel();
+    renderNames(prefs.side);
   });
   function setSide(side) {
     prefs.side = side;
     sideW.classList.toggle("on", side === "w");
     sideB.classList.toggle("on", side === "b");
+    renderNames(side);
   }
   sideW.addEventListener("click", () => setSide("w"));
   sideB.addEventListener("click", () => setSide("b"));
@@ -853,6 +927,7 @@
     }
   } catch (e) { /* corrupted save — fall through to the menu */ }
   if (!resumed) {
+    playerSide = prefs.side; // keeps the menu's pick and the player rows in agreement
     buildBoard();
     setStatus("");
   }
