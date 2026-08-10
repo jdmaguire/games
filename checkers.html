@@ -64,6 +64,18 @@
     border-radius: 8px;
     overflow: hidden;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+    touch-action: none; /* board drags must reach pointermove, not the browser */
+  }
+  .drag-ghost {
+    position: absolute;
+    z-index: 4;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    transform: scale(1.12);
+    filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.5));
+    will-change: left, top;
   }
   .fly {
     position: absolute;
@@ -529,7 +541,7 @@
         div.className = "sq " + ((r + c) % 2 === 0 ? "light" : "dark");
         div.dataset.r = r;
         div.dataset.c = c;
-        div.addEventListener("pointerdown", (e) => { e.preventDefault(); onTap(r, c); });
+        div.addEventListener("pointerdown", (e) => { e.preventDefault(); onDown(e, r, c); });
         boardEl.appendChild(div);
         cells.push(div);
         cellMap[r * 8 + c] = div;
@@ -612,48 +624,55 @@
     render();
   }
 
-  function onTap(r, c) {
-    ensureAudio();
-    if (thinking || animating || gameOver || turn !== playerSide || !overlay.classList.contains("hidden")) return;
-
-    // Continue or complete a move to (r, c)?
+  // Continue or complete a move to (r, c); returns true if one was played.
+  // `instant` lands the piece immediately (drag-drop); otherwise it flies.
+  function tryMove(r, c, instant) {
     const matches = activeMoves.filter((mv) =>
       (!midJump ? selected && mv.path[0][0] === selected[0] && mv.path[0][1] === selected[1] : true) &&
       mv.path[1][0] === r && mv.path[1][1] === c
     );
-    if ((selected || midJump) && matches.length) {
-      const from = midJump ? selected : matches[0].path[0];
-      const pieceBefore = board[from[0]][from[1]];
-      const isFinal = matches.every((mv) => mv.path.length === 2);
-      const caps = matches[0].caps.length ? [matches[0].caps[0]] : [];
-      animating = true;
-      clearHints();
-      const fromEl = cellMap[from[0] * 8 + from[1]];
-      flyPiece(fromEl, cellMap[r * 8 + c], fromEl.innerHTML, () => {
-        animating = false;
-        applyMove(board, { path: [from, [r, c]], caps });
-        lastPath = [from, [r, c]];
-        if (isFinal) {
-          const crowned = isMan(pieceBefore) && Math.abs(board[r][c]) === 2;
-          clock = caps.length || isMan(pieceBefore) ? 0 : clock + 1;
-          render();
-          if (crowned) sfx.promote();
-          else if (caps.length) sfx.capture();
-          else sfx.land();
-          finishPlayerMove();
-        } else {
-          // Mid multi-jump: locked to the same piece, keep going
-          clock = 0;
-          selected = [r, c];
-          midJump = true;
-          activeMoves = matches.map((mv) => ({ path: mv.path.slice(1), caps: mv.caps.slice(1) }));
-          render();
-          sfx.capture();
-          setStatus("Keep jumping!");
-        }
-      }, 200);
-      return;
-    }
+    if (!(selected || midJump) || !matches.length) return false;
+    const from = midJump ? selected : matches[0].path[0];
+    const pieceBefore = board[from[0]][from[1]];
+    const isFinal = matches.every((mv) => mv.path.length === 2);
+    const caps = matches[0].caps.length ? [matches[0].caps[0]] : [];
+    const land = () => {
+      applyMove(board, { path: [from, [r, c]], caps });
+      lastPath = [from, [r, c]];
+      if (isFinal) {
+        const crowned = isMan(pieceBefore) && Math.abs(board[r][c]) === 2;
+        clock = caps.length || isMan(pieceBefore) ? 0 : clock + 1;
+        render();
+        if (crowned) sfx.promote();
+        else if (caps.length) sfx.capture();
+        else sfx.land();
+        finishPlayerMove();
+      } else {
+        // Mid multi-jump: locked to the same piece, keep going
+        clock = 0;
+        selected = [r, c];
+        midJump = true;
+        activeMoves = matches.map((mv) => ({ path: mv.path.slice(1), caps: mv.caps.slice(1) }));
+        render();
+        sfx.capture();
+        setStatus("Keep jumping!");
+      }
+    };
+    clearHints();
+    if (instant) { land(); return true; }
+    animating = true;
+    const fromEl = cellMap[from[0] * 8 + from[1]];
+    flyPiece(fromEl, cellMap[r * 8 + c], fromEl.innerHTML, () => {
+      animating = false;
+      land();
+    }, 200);
+    return true;
+  }
+
+  function onTap(r, c) {
+    ensureAudio();
+    if (thinking || animating || gameOver || turn !== playerSide || !overlay.classList.contains("hidden")) return;
+    if (tryMove(r, c, false)) return;
     if (midJump) return; // locked into the jump sequence
 
     // (Re)select one of your pieces
@@ -664,6 +683,73 @@
     }
     render();
   }
+
+  // ---------- Drag to move ----------
+  let drag = null; // {id, from, x0, y0, active, ghost}
+
+  function onDown(e, r, c) {
+    if (drag) return; // ignore extra fingers while a drag is in flight
+    onTap(r, c);
+    // If that press selected (or is locked to) our piece, arm a drag so it
+    // can also be carried straight to its landing square.
+    if (selected && selected[0] === r && selected[1] === c && board[r][c] !== 0 &&
+        !animating && !thinking && !gameOver && turn === playerSide) {
+      drag = { id: e.pointerId, from: [r, c], x0: e.clientX, y0: e.clientY, active: false, ghost: null };
+      try { boardEl.setPointerCapture(e.pointerId); } catch (err) { /* older Safari */ }
+    }
+  }
+
+  function cellAt(e) {
+    const br = boardEl.getBoundingClientRect();
+    const col = Math.floor((e.clientX - br.left) / (br.width / 8));
+    const row = Math.floor((e.clientY - br.top) / (br.height / 8));
+    if (col < 0 || col > 7 || row < 0 || row > 7) return null;
+    const flip = playerSide === BLK;
+    return [flip ? 7 - row : row, flip ? 7 - col : col];
+  }
+
+  function onDragMove(e) {
+    if (!drag || e.pointerId !== drag.id) return;
+    if (!drag.active) {
+      if (Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < 6) return; // still a tap
+      drag.active = true;
+      const srcEl = cellMap[drag.from[0] * 8 + drag.from[1]];
+      const ghost = document.createElement("div");
+      ghost.className = "drag-ghost";
+      ghost.style.width = ghost.style.height = boardEl.getBoundingClientRect().width / 8 + "px";
+      ghost.innerHTML = srcEl.innerHTML;
+      boardEl.appendChild(ghost);
+      if (srcEl.firstChild) srcEl.firstChild.style.opacity = "0.35"; // faint piece stays home
+      drag.ghost = ghost;
+    }
+    const br = boardEl.getBoundingClientRect();
+    const s = br.width / 8;
+    drag.ghost.style.left = (e.clientX - br.left - s / 2) + "px";
+    drag.ghost.style.top = (e.clientY - br.top - s / 2) + "px";
+  }
+
+  function onDragEnd(e) {
+    if (!drag || e.pointerId !== drag.id) return;
+    const d = drag;
+    drag = null;
+    if (!d.active) return; // plain tap — selection already handled on pointerdown
+    d.ghost.remove();
+    render(); // restore the lifted piece; selection + hints stay for tap play
+    if (thinking || animating || gameOver || turn !== playerSide) return;
+    const rc = cellAt(e);
+    if (rc) tryMove(rc[0], rc[1], true); // an illegal drop just snaps the piece home
+  }
+
+  function onDragCancel(e) {
+    if (!drag || e.pointerId !== drag.id) return;
+    if (drag.ghost) drag.ghost.remove();
+    drag = null;
+    render();
+  }
+
+  window.addEventListener("pointermove", onDragMove);
+  window.addEventListener("pointerup", onDragEnd);
+  window.addEventListener("pointercancel", onDragCancel);
 
   function finishPlayerMove() {
     selected = null;

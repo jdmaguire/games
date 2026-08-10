@@ -64,6 +64,20 @@
     border-radius: 8px;
     overflow: hidden;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+    touch-action: none; /* board drags must reach pointermove, not the browser */
+  }
+  .drag-ghost {
+    position: absolute;
+    z-index: 4;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    font-size: calc(min(94vmin, 560px) / 8 * 0.88);
+    line-height: 1;
+    transform: scale(1.15);
+    filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.5));
+    will-change: left, top;
   }
   .fly {
     position: absolute;
@@ -427,7 +441,7 @@
         const div = document.createElement("div");
         div.className = "sq " + ((r + c) % 2 === 0 ? "light" : "dark");
         div.dataset.sq = sq;
-        div.addEventListener("pointerdown", (e) => { e.preventDefault(); onSquareTap(sq); });
+        div.addEventListener("pointerdown", (e) => { e.preventDefault(); onSquareDown(e, sq); });
         boardEl.appendChild(div);
         squares[sq] = div;
       }
@@ -489,6 +503,78 @@
     render();
   }
 
+  // ---------- Drag to move ----------
+  let drag = null; // {id, from, x0, y0, active, ghost}
+
+  function onSquareDown(e, sq) {
+    if (drag) return; // ignore extra fingers while a drag is in flight
+    onSquareTap(sq);
+    // If that press selected one of our pieces, arm a drag so it can also
+    // be carried straight to its target square.
+    if (selected === sq && !animating && !thinking && !gameOver) {
+      drag = { id: e.pointerId, from: sq, x0: e.clientX, y0: e.clientY, active: false, ghost: null };
+      try { boardEl.setPointerCapture(e.pointerId); } catch (err) { /* older Safari */ }
+    }
+  }
+
+  function squareAt(e) {
+    const br = boardEl.getBoundingClientRect();
+    const col = Math.floor((e.clientX - br.left) / (br.width / 8));
+    const row = Math.floor((e.clientY - br.top) / (br.height / 8));
+    if (col < 0 || col > 7 || row < 0 || row > 7) return null;
+    const flip = playerSide === "b";
+    const r = flip ? 7 - row : row;
+    const c = flip ? 7 - col : col;
+    return FILES[c] + (8 - r);
+  }
+
+  function onDragMove(e) {
+    if (!drag || e.pointerId !== drag.id) return;
+    if (!drag.active) {
+      if (Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < 6) return; // still a tap
+      drag.active = true;
+      const srcEl = squares[drag.from];
+      const ghost = document.createElement("div");
+      ghost.className = "drag-ghost";
+      ghost.style.width = ghost.style.height = boardEl.getBoundingClientRect().width / 8 + "px";
+      ghost.innerHTML = srcEl.innerHTML;
+      boardEl.appendChild(ghost);
+      if (srcEl.firstChild) srcEl.firstChild.style.opacity = "0.35"; // faint piece stays home
+      drag.ghost = ghost;
+    }
+    const br = boardEl.getBoundingClientRect();
+    const s = br.width / 8;
+    drag.ghost.style.left = (e.clientX - br.left - s / 2) + "px";
+    drag.ghost.style.top = (e.clientY - br.top - s / 2) + "px";
+  }
+
+  function onDragEnd(e) {
+    if (!drag || e.pointerId !== drag.id) return;
+    const d = drag;
+    drag = null;
+    if (!d.active) return; // plain tap — selection already handled on pointerdown
+    d.ghost.remove();
+    render(); // restore the lifted piece; selection + hints stay for tap play
+    if (thinking || animating || gameOver) return;
+    const sq = squareAt(e);
+    const target = sq && legalTargets.find((m) => m.to === sq);
+    if (!target) return; // dropped somewhere illegal — the piece snaps home
+    const promos = legalTargets.filter((m) => m.to === sq && m.promotion);
+    if (promos.length) return showPromoPicker(d.from, sq);
+    playerMove({ from: d.from, to: sq }, true);
+  }
+
+  function onDragCancel(e) {
+    if (!drag || e.pointerId !== drag.id) return;
+    if (drag.ghost) drag.ghost.remove();
+    drag = null;
+    render();
+  }
+
+  window.addEventListener("pointermove", onDragMove);
+  window.addEventListener("pointerup", onDragEnd);
+  window.addEventListener("pointercancel", onDragCancel);
+
   function showPromoPicker(from, to) {
     promoEl.innerHTML = "";
     for (const p of ["q", "r", "b", "n"]) {
@@ -537,9 +623,18 @@
 
   // The move is already applied to `game`; the DOM still shows the old position,
   // so fly the piece from its old square, then re-render and play the landing sound.
-  function animateMade(made, done) {
+  function animateMade(made, done, instant) {
     animating = true;
     clearHints();
+    if (instant) { // drag-drop: the piece was carried there by hand, just land it
+      animating = false;
+      render();
+      if (made.promotion) sfx.promote();
+      else if (made.captured) sfx.capture();
+      else sfx.land();
+      done();
+      return;
+    }
     const rook = rookSquares(made);
     if (rook) flyPiece(squares[rook[0]], squares[rook[1]], squares[rook[0]].innerHTML, null, 180);
     flyPiece(squares[made.from], squares[made.to], squares[made.from].innerHTML, () => {
@@ -552,7 +647,7 @@
     }, 180);
   }
 
-  function playerMove(mv) {
+  function playerMove(mv, instant) {
     const made = game.move(mv);
     uciMoves.push(made.from + made.to + (made.promotion || ""));
     lastMove = { from: made.from, to: made.to };
@@ -562,7 +657,7 @@
     animateMade(made, () => {
       if (checkGameEnd()) return;
       engineMove();
-    });
+    }, instant);
   }
 
   // ---------- Engine turn ----------
