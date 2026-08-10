@@ -70,6 +70,25 @@
   #overlay .go { color: var(--text); font-weight: 600; animation: pulse 1.2s ease-in-out infinite; }
   #overlay a { color: var(--muted); text-decoration: none; font-size: 14px; margin-top: 8px; padding: 8px 14px; }
   @keyframes pulse { 50% { opacity: 0.45; } }
+  #skin-grid {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    max-width: 480px;
+  }
+  #skin-grid[hidden] { display: none; }
+  #skin-grid button {
+    padding: 10px 14px;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-radius: 10px;
+    background: #1c2033;
+    color: var(--text);
+    font: 700 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+  }
+  #skin-grid button:hover { background: #34405f; }
   #controls {
     display: none;
     gap: 10px;
@@ -104,6 +123,7 @@
       <h1 id="ov-title">Sockbot Showdown</h1>
       <div class="result" id="ov-result" hidden></div>
       <p id="ov-text"></p>
+      <div id="skin-grid" hidden></div>
       <p class="go" id="ov-go"></p>
       <a id="back" href="index.html">← Games</a>
     </div>
@@ -154,17 +174,24 @@
     { name: "SPIDER BOT", torso: "#1d4ed8", chest: "#1e3a8a", accent: "#dc2626",
       head: "#dc2626", arm: "#991b1b", glove: "#dc2626", eyes: "#f8fafc", bar: "#dc2626",
       web: true, lenses: true, spider: true },
-    // Blue cattle pup: tall two-tone ears, tan muzzle, waggy tail
-    { name: "BLUE HEELER", torso: "#6497c9", chest: "#f2d5a8", accent: "#4a7bab",
-      head: "#8fb8de", arm: "#4a7bab", glove: "#8fb8de", eyes: "#fef9c3", bar: "#8fb8de",
-      ears: "dog", earColor: "#4a7bab", earTip: "#2c517a", earInner: "#f2d5a8",
-      headPatch: "#4a7bab", muzzle: "#f2d5a8", bigEyes: true, pupil: "#1f2937",
-      tail: "wag", tailColor: "#4a7bab", tailTip: "#f2d5a8" },
-    { name: "RED HEELER", torso: "#d98b52", chest: "#f7e3c3", accent: "#b06a3c",
-      head: "#e8a97e", arm: "#b06a3c", glove: "#e8a97e", eyes: "#fef9c3", bar: "#e8a97e",
-      ears: "dog", earColor: "#b06a3c", earTip: "#8a4a26", earInner: "#f7e3c3",
-      headPatch: "#c97b45", muzzle: "#f7e3c3", bigEyes: true, pupil: "#1f2937",
-      tail: "wag", tailColor: "#b06a3c", tailTip: "#f7e3c3" },
+    // Blue pup: light "Malibu" blue coat, dark slate masks over both eyes and
+    // outer ears, sand-yellow inner ears + inner muzzle, pale blue chest and
+    // brows, light tail with a dark tip, black nose
+    { name: "BLUE HEELER", torso: "#7fbfe5", chest: "#d9ecf7", accent: "#474e6e",
+      head: "#7fbfe5", arm: "#64a9d6", glove: "#7fbfe5", eyes: "#fef9c3", bar: "#7fbfe5",
+      ears: "dog", earColor: "#474e6e", earInner: "#e6c28c",
+      eyeMask: "#474e6e", brows: "#d9ecf7", muzzle: "#d9ecf7", muzzleInner: "#e6c28c",
+      smile: true, bigEyes: true, pupil: "#1f2937",
+      tail: "wag", tailColor: "#7fbfe5", tailTip: "#474e6e" },
+    // Orange pup: light orange coat, dark orange masks and outer ears, orange
+    // inner ears, cream chest/muzzle/brows, orange tail with a cream tip,
+    // brown nose
+    { name: "RED HEELER", torso: "#e8a854", chest: "#f9e9c8", accent: "#d07a3f",
+      head: "#e8a854", arm: "#d08d43", glove: "#e8a854", eyes: "#fef9c3", bar: "#e8a854",
+      ears: "dog", earColor: "#c9722f", earInner: "#e8a854",
+      eyeMask: "#d07a3f", brows: "#f9e9c8", blaze: "#f9e9c8", muzzle: "#f9e9c8", noseColor: "#6b4226",
+      smile: true, bigEyes: true, pupil: "#1f2937",
+      tail: "wag", tailColor: "#e8a854", tailTip: "#f9e9c8" },
     // Spotted rescue pup: red helmet, floppy ears, paw-print badge
     { name: "PUP BOT", torso: "#dc2626", chest: "#b91c1c", accent: "#facc15",
       head: "#f8fafc", arm: "#b91c1c", glove: "#dc2626", eyes: "#7dd3fc", bar: "#dc2626",
@@ -216,6 +243,7 @@
   const ovResult = document.getElementById("ov-result");
   const ovText = document.getElementById("ov-text");
   const ovGo = document.getElementById("ov-go");
+  const skinGrid = document.getElementById("skin-grid");
 
   // roundRect shipped in Safari 16; fall back to plain rects before that
   if (!CanvasRenderingContext2D.prototype.roundRect) {
@@ -292,7 +320,7 @@
 
   // ---------- Game state ----------
   let W = 0, H = 0;             // canvas size in CSS px
-  let state = "menu";           // menu | fight | ko | result | paused
+  let state = "menu";           // menu | fight | ko | result | paused | select
   let now = 0;                  // ms clock, advanced by dt
   let fightT = 0;               // time since round start (for FIGHT! banner)
   let koT = 0, winner = null;   // ko animation clock
@@ -317,15 +345,18 @@
   }
 
   // ---------- Match flow ----------
+  let forcedSkin = null; // set by the secret sparring-gym picker; used once
   function startFight() {
     player.hp = MAX_HP; player.punch = null; player.armCd.L = 0; player.armCd.R = 0;
     player.globalCd = 0; player.hurtT = 0;
-    cpu.skin = pickSkin();
+    cpu.skin = forcedSkin || pickSkin();
+    forcedSkin = null;
     cpu.maxHp = cpu.skin.maxHp || MAX_HP;
     cpu.hp = cpu.maxHp; cpu.st = "idle"; cpu.t = rand(400, 800); cpu.recoilT = 0; cpu.hitStreak = 0;
     particles = [];
     fightT = 0;
     state = "fight";
+    skinGrid.hidden = true;
     overlay.classList.add("hidden");
     sfx.bell();
     if (cpu.skin.dragon) sfx.roar();
@@ -356,6 +387,7 @@
   function showMenu() {
     ovTitle.textContent = "Sockbot Showdown";
     ovResult.hidden = true;
+    skinGrid.hidden = true;
     ovText.innerHTML = isTouch
       ? "Jab with the corner buttons, hold <b>BLOCK</b> when the blue bot's glove flashes.<br>Block a punch to stun him — then swing away!"
       : "<b>A</b> / <b>D</b> to jab, hold <b>S</b> (or Space) to block when the blue bot's glove flashes.<br>Block a punch to stun him — then swing away! <b>P</b> pauses.";
@@ -367,6 +399,7 @@
     state = "result";
     ovTitle.textContent = "Sockbot Showdown";
     ovResult.hidden = false;
+    skinGrid.hidden = true;
     if (winner === "player") {
       ovResult.textContent = "YOU WIN! 🏆";
       ovResult.style.color = "#4ade80";
@@ -399,6 +432,7 @@
       state = "paused";
       ovTitle.textContent = "Paused";
       ovResult.hidden = true;
+      skinGrid.hidden = true;
       ovText.textContent = "";
       ovGo.textContent = isTouch ? "Tap to resume" : "Press any key to resume";
       overlay.classList.remove("hidden");
@@ -406,6 +440,35 @@
       state = "fight";
       overlay.classList.add("hidden");
     }
+  }
+
+  // Secret sparring gym (undocumented): typing "tyuiop" stops the current
+  // round and offers every challenger, dragon included. Picking one restarts
+  // the round against them; everything else (streaks, levels) runs as normal.
+  const ALL_SKINS = [SKIN_BLUE, SKIN_GREEN, ...RARE_SKINS, SKIN_DRAGON];
+  function showSkinSelect() {
+    state = "select";
+    player.blockHeld = false;
+    ovTitle.textContent = "Sparring Gym";
+    ovResult.hidden = true;
+    ovText.textContent = "Pick your next opponent.";
+    ovGo.textContent = "";
+    skinGrid.innerHTML = "";
+    for (const sk of ALL_SKINS) {
+      const b = document.createElement("button");
+      b.textContent = sk.name;
+      b.style.borderColor = sk.bar;
+      b.addEventListener("pointerdown", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        ensureAudio();
+        forcedSkin = sk;
+        startFight();
+      });
+      skinGrid.appendChild(b);
+    }
+    skinGrid.hidden = false;
+    overlay.classList.remove("hidden");
   }
 
   // ---------- Combat ----------
@@ -845,15 +908,6 @@
           ctx.closePath();
           ctx.fill();
         }
-        if (k.earTip) {
-          ctx.fillStyle = k.earTip;
-          ctx.beginPath();
-          ctx.moveTo(cx + sign * 46 * s, hy - 74 * s);
-          ctx.lineTo(cx + sign * 32 * s, hy - 55 * s);
-          ctx.lineTo(cx + sign * 48 * s, hy - 56 * s);
-          ctx.closePath();
-          ctx.fill();
-        }
       }
     } else if (k.ears === "floppy") {
       // Droopy pup ears hanging beside the helmet
@@ -896,16 +950,35 @@
       }
       ctx.restore();
     }
-    // Fur markings, clipped to the head (heeler crown patch, dalmatian spots)
-    if (k.headPatch || k.spots) {
+    // Fur markings, clipped to the head (heeler masks, dalmatian spots)
+    if (k.eyeMask || k.blaze || k.spots) {
       ctx.save();
       ctx.beginPath();
       ctx.roundRect(cx - 48 * s, hy - 34 * s, 96 * s, 70 * s, 16 * s);
       ctx.clip();
-      if (k.headPatch) {
-        ctx.fillStyle = k.headPatch;
+      if (k.eyeMask) {
+        // Dark patches around each eye, running up to the ears; the strip
+        // between them stays coat-colored
+        ctx.fillStyle = k.eyeMask;
+        for (const sign of [-1, 1]) {
+          ctx.beginPath();
+          ctx.ellipse(cx + sign * 26 * s, hy - 14 * s, 24 * s, 28 * s, 0, 0, TAU);
+          ctx.fill();
+        }
+        if (k.brows) { // little light eyebrows on the masks
+          ctx.fillStyle = k.brows;
+          for (const sign of [-1, 1]) {
+            ctx.beginPath();
+            ctx.ellipse(cx + sign * 20 * s, hy - 25 * s, 7 * s, 3.5 * s, 0, 0, TAU);
+            ctx.fill();
+          }
+        }
+      }
+      if (k.blaze) {
+        // Light snout stripe continuing up the forehead between the masks
+        ctx.fillStyle = k.blaze;
         ctx.beginPath();
-        ctx.ellipse(cx, hy - 32 * s, 46 * s, 16 * s, 0, 0, TAU);
+        ctx.roundRect(cx - 9 * s, hy - 34 * s, 18 * s, 50 * s, 9 * s);
         ctx.fill();
       }
       if (k.spots) {
@@ -1109,10 +1182,24 @@
         ctx.arc(cx, hy + 23 * s, 8 * s, Math.PI * 0.15, Math.PI * 0.85);
         ctx.stroke();
       } else {
-        ctx.fillStyle = "#1f2937";
+        if (k.muzzleInner) { // inner muzzle patch around the nose
+          ctx.fillStyle = k.muzzleInner;
+          ctx.beginPath();
+          ctx.roundRect(cx - 16 * s, hy + 14 * s, 32 * s, 18 * s, 8 * s);
+          ctx.fill();
+        }
+        const noseColor = k.noseColor || "#1f2937";
+        ctx.fillStyle = noseColor;
         ctx.beginPath();
         ctx.ellipse(cx, hy + 18 * s, 8 * s, 5 * s, 0, 0, TAU);
         ctx.fill();
+        if (k.smile) {
+          ctx.strokeStyle = noseColor;
+          ctx.lineWidth = 2.5 * s;
+          ctx.beginPath();
+          ctx.arc(cx, hy + 23 * s, 8 * s, Math.PI * 0.15, Math.PI * 0.85);
+          ctx.stroke();
+        }
       }
     }
 
@@ -1642,6 +1729,8 @@
 
   // ---------- Input: keyboard (macOS Safari) ----------
   const BLOCK_KEYS = new Set(["s", "arrowdown", " "]);
+  const CHEAT = "tyuiop";
+  let cheatPos = 0;
 
   window.addEventListener("keydown", (e) => {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -1651,6 +1740,16 @@
     }
     ensureAudio();
     if (e.repeat) return;
+    // The secret code advances quietly regardless of what else the key does
+    cheatPos = key === CHEAT[cheatPos] ? cheatPos + 1 : (key === CHEAT[0] ? 1 : 0);
+    if (cheatPos === CHEAT.length) {
+      cheatPos = 0;
+      return showSkinSelect();
+    }
+    if (state === "select") {
+      if (key === "escape") startFight(); // never mind — random opponent
+      return;
+    }
     if (state === "menu" || state === "result") return startFight();
     if (state === "paused") return togglePause();
     if (state !== "fight") return;
