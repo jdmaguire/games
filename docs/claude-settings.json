@@ -1,0 +1,43 @@
+{
+  "$comment": [
+    "Recommended Claude Code project settings for this repo.",
+    "This file is inert — Claude Code only reads .claude/settings.json. To use it:",
+    "    mkdir -p .claude && cp docs/claude-settings.json .claude/settings.json",
+    "(.claude/settings.json is checked in by convention, so commit it once copied.)",
+    "",
+    "Why the deny list: engines/stockfish-18-lite-single.wasm is 7.3 MB, its emscripten",
+    "glue is 21 KB of minified JS on 10 lines, and lib/chess-1.4.0.mjs is 107 KB of",
+    "vendored chess.js. Reading any of them costs a large amount of context and teaches",
+    "you nothing, because they are replaced wholesale from upstream rather than",
+    "hand-edited. Denying the reads makes that mistake impossible rather than merely",
+    "discouraged.",
+    "",
+    "Why the allow list: it covers read-only inspection plus the add/commit pair used",
+    "constantly here, so routine work stops halting for permission prompts. There are no",
+    "secrets in this repo. Trim it if you want a tighter default.",
+    "",
+    "The $comment key is ignored by Claude Code; JSON has no comment syntax."
+  ],
+  "permissions": {
+    "deny": [
+      "Read(./engines/stockfish-18-lite-single.wasm)",
+      "Read(./engines/stockfish-18-lite-single.js)",
+      "Read(./engines/STOCKFISH-LICENSE.txt)",
+      "Read(./lib/chess-1.4.0.mjs)",
+      "Read(./lib/CHESSJS-LICENSE.txt)",
+      "Read(./LICENSE)"
+    ],
+    "allow": [
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(node --check:*)",
+      "Bash(ls:*)",
+      "Bash(wc:*)",
+      "Bash(python3 -m http.server:*)"
+    ]
+  }
+}
