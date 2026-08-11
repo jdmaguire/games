@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Breakout</title>
+<link rel="stylesheet" href="css/breakout.css">
+</head>
+<body>
+  <div id="hud">
+    <div><div class="label">Score</div><div class="value" id="score">0</div></div>
+    <div id="mid">
+      <a id="back" href="index.html">← Games</a>
+      <div class="label" id="level">Level 1</div>
+    </div>
+    <div style="text-align:right"><div class="label">Balls</div><div class="value" id="lives">●●●</div></div>
+  </div>
+  <div id="board-wrap">
+    <canvas id="board"></canvas>
+    <div id="overlay">
+      <h1 id="overlay-title">Breakout</h1>
+      <p class="big-score" id="overlay-score" hidden></p>
+      <p id="overlay-hint"></p>
+    </div>
+  </div>
+
+<script src="js/shared/audio.js"></script>
+<script src="js/shared/celebrate.js"></script>
+<script src="js/breakout.js"></script>
+</body>
+</html>
