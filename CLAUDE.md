@@ -21,11 +21,12 @@ you are changing. Markup, styling, and logic are three separate reads now.
 
 | Page | Shell | Styles | Logic |
 | --- | --- | --- | --- |
-| Game-select menu | `index.html` (~47) | `css/index.css` (84) | `js/index.js` (33) |
+| Game-select menu | `index.html` (~54) | `css/index.css` (85) | `js/index.js` (38) |
 | Snake | `snake.html` (~28) | `css/snake.css` (76) | `js/snake.js` (309) |
 | Sockbot Showdown | `robot.html` (~32) | `css/robot.css` (107) | `js/robot.js` (**1656**) |
 | Chess | `chess.html` (~49) | `css/chess.css` (184) | `js/chess.js` (612) |
 | Checkers | `checkers.html` (~48) | `css/checkers.css` (180) | `js/checkers.js` (675) |
+| Breakout | `breakout.html` (~33) | `css/breakout.css` (77) | `js/breakout.js` (462) |
 
 Shared, loaded by the pages that need them:
 
@@ -87,6 +88,10 @@ somewhere around 18k tokens; a single section costs a few hundred. See
 - **`js/checkers.js`** — Preferences · Audio · Win celebration · Rules · Engine
   (negamax + alpha-beta) · Game state · Board rendering · Move animation · Material
   counter · Turn flow · Drag to move · Setup UI
+- **`js/breakout.js`** — Tuning · Audio · State · Sizing · Game setup · Physics ·
+  Render · Main loop · Input: keyboard · Input: touch · Input: mouse · Boot.
+  Gameplay runs in a fixed 100 × 140 logical playfield; `scale` is the only
+  pixels-per-unit number, so tuning constants never mention pixels.
 
 ## Conventions
 
@@ -108,7 +113,7 @@ somewhere around 18k tokens; a single section costs a few hundred. See
   keeps its own `sfx` object of named voices on top of the shared primitives.
 - **`localStorage` is always wrapped in `try/catch`** (`/* private browsing */`). Keys in
   use: `snake-best`, `sockbot-record`, `chess-prefs`, `chess-game`, `checkers-prefs`,
-  `checkers-game`. `js/index.js` reads all of them to render card stats — if you rename or
+  `checkers-game`, `breakout-best`. `js/index.js` reads all of them to render card stats — if you rename or
   reshape a key, update it too.
 - **Canvas games** scale by `devicePixelRatio` and derive sizes from a single scale unit
   (e.g. `js/robot.js`'s `S()`), so nothing is hard-coded in pixels.

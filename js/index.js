@@ -24,8 +24,13 @@
     }
   } catch (e) { /* private browsing */ }
 
+  try {
+    const best = parseInt(localStorage.getItem("breakout-best"), 10);
+    if (best > 0) document.getElementById("breakout-stat").textContent = "Best score: " + best;
+  } catch (e) { /* private browsing */ }
+
   // Quick keyboard select on desktop
-  const KEYS = { 1: "snake.html", 2: "robot.html", 3: "chess.html", 4: "checkers.html" };
+  const KEYS = { 1: "snake.html", 2: "robot.html", 3: "chess.html", 4: "checkers.html", 5: "breakout.html" };
   window.addEventListener("keydown", (e) => {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     if (KEYS[e.key]) window.location.href = KEYS[e.key];
