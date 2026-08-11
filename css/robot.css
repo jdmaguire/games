@@ -1,0 +1,107 @@
+  :root {
+    --bg: #101223;
+    --text: #f1f5f9;
+    --muted: #9aa3b8;
+    --red: #ef4444;
+    --blue: #3b82f6;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    /* Disable pull-to-refresh, scroll bounce, and double-tap zoom on iOS */
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
+  }
+  body {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;  /* fallback */
+    height: 100dvh; /* iOS Safari dynamic viewport */
+  }
+  #stage { position: relative; flex: 1; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  #overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    text-align: center;
+    background: rgba(10, 12, 26, 0.8);
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
+    padding: 24px;
+    z-index: 5;
+  }
+  #overlay.hidden { display: none; }
+  #overlay h1 {
+    font-size: clamp(30px, 8vw, 52px);
+    font-style: italic;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    background: linear-gradient(180deg, #fbbf24, #ef4444);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  #overlay .result { font-size: 30px; font-weight: 800; }
+  #overlay p { color: var(--muted); font-size: 16px; line-height: 1.6; max-width: 34em; }
+  #overlay .go { color: var(--text); font-weight: 600; animation: pulse 1.2s ease-in-out infinite; }
+  #overlay a { color: var(--muted); text-decoration: none; font-size: 14px; margin-top: 8px; padding: 8px 14px; }
+  @keyframes pulse { 50% { opacity: 0.45; } }
+  #skin-grid {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    max-width: 480px;
+  }
+  #skin-grid[hidden] { display: none; }
+  #skin-grid button {
+    padding: 10px 14px;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-radius: 10px;
+    background: #1c2033;
+    color: var(--text);
+    font: 700 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+  }
+  #skin-grid button:hover { background: #34405f; }
+  #controls {
+    display: none;
+    gap: 10px;
+    padding: 10px
+             max(10px, env(safe-area-inset-right))
+             max(10px, env(safe-area-inset-bottom))
+             max(10px, env(safe-area-inset-left));
+    background: #0a0c1a;
+  }
+  body.touch #controls { display: flex; }
+  #controls button {
+    flex: 1;
+    height: 84px;
+    border: 2px solid rgba(255, 255, 255, 0.14);
+    border-radius: 16px;
+    background: #1c2033;
+    color: var(--text);
+    font: 800 17px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    letter-spacing: 0.06em;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  #controls button.pressed { background: #34405f; transform: scale(0.96); }
+  #controls #btn-block { flex: 0.9; background: #232b45; }

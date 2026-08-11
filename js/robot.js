@@ -1,0 +1,1656 @@
+(() => {
+  "use strict";
+
+  // ---------- Tuning ----------
+  const MAX_HP = 100;
+  const JAB_DUR = 280, JAB_CONTACT = 120;   // ms: full swing / moment it lands
+  const ARM_CD = 550, GLOBAL_CD = 250;      // ms between punches (per arm / any arm)
+  const JAB_DMG = 10, COUNTER_MULT = 1.5, CHIP_DMG = 2;
+  const CPU_DMG = 12;
+  const CPU_PUNCH_MS = 210;                 // cpu glove flies at the camera for this long
+  const TAIL_MS = 260, TAIL_DMG = 18;       // dragon tail sweep: unblockable only by blocking, hits hard
+  const DRAGON_TRIES = 3;                   // attempts you get to slay the dragon before the streak dies
+  const STUN_MS = 600, RECOVER_MS = 750;
+  const MAX_LEVEL = 8;                      // difficulty cap (cpu speeds up per win)
+
+  const TAU = Math.PI * 2;
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  const rand = (a, b) => a + Math.random() * (b - a);
+
+  // ---------- Opponent skins: 80% classic blue, 20% a surprise challenger ----------
+  const SKIN_BLUE = {
+    name: "BLUE BOT", torso: "#2563eb", chest: "#1e40af", accent: "#facc15",
+    head: "#3b82f6", arm: "#1e40af", glove: "#3b82f6", eyes: "#7dd3fc", bar: "#3b82f6",
+  };
+  const SKIN_GREEN = {
+    name: "GREEN BOT", torso: "#16a34a", chest: "#166534", accent: "#facc15",
+    head: "#22c55e", arm: "#166534", glove: "#22c55e", eyes: "#bbf7d0", bar: "#22c55e",
+  };
+  const RARE_SKINS = [
+    // Tan chimp face with a cheeky grin, big round ears, curly tail
+    { name: "CHIMP BOT", torso: "#78350f", chest: "#5c2c0c", accent: "#fbbf24",
+      head: "#92400e", arm: "#5c2c0c", glove: "#b45309", eyes: "#fde68a", bar: "#b45309",
+      ears: "round", earColor: "#d4a373", muzzle: "#d4a373", facePatch: "#d4a373",
+      beadEyes: "#3f2a1e", nostrils: true, tail: "curl", tailColor: "#92400e" },
+    // Red webbed mask, big white lenses, spider emblem on the chest
+    { name: "SPIDER BOT", torso: "#1d4ed8", chest: "#1e3a8a", accent: "#dc2626",
+      head: "#dc2626", arm: "#991b1b", glove: "#dc2626", eyes: "#f8fafc", bar: "#dc2626",
+      web: true, lenses: true, spider: true },
+    // Blue pup: light "Malibu" blue coat, dark slate masks over both eyes and
+    // outer ears, sand-yellow inner ears + inner muzzle, pale blue chest and
+    // brows, light tail with a dark tip, black nose
+    { name: "BLUE HEELER", torso: "#7fbfe5", chest: "#d9ecf7", accent: "#474e6e",
+      head: "#7fbfe5", arm: "#64a9d6", glove: "#7fbfe5", eyes: "#fef9c3", bar: "#7fbfe5",
+      ears: "dog", earColor: "#474e6e", earInner: "#e6c28c",
+      eyeMask: "#474e6e", brows: "#d9ecf7", muzzle: "#d9ecf7", muzzleInner: "#e6c28c",
+      smile: true, bigEyes: true, pupil: "#1f2937",
+      tail: "wag", tailColor: "#7fbfe5", tailTip: "#474e6e" },
+    // Orange pup: light orange coat, dark orange masks and outer ears, orange
+    // inner ears, cream chest/muzzle/brows, orange tail with a cream tip,
+    // brown nose
+    { name: "RED HEELER", torso: "#e8a854", chest: "#f9e9c8", accent: "#d07a3f",
+      head: "#e8a854", arm: "#d08d43", glove: "#e8a854", eyes: "#fef9c3", bar: "#e8a854",
+      ears: "dog", earColor: "#c9722f", earInner: "#e8a854",
+      eyeMask: "#d07a3f", brows: "#f9e9c8", blaze: "#f9e9c8", muzzle: "#f9e9c8", noseColor: "#6b4226",
+      smile: true, bigEyes: true, pupil: "#1f2937",
+      tail: "wag", tailColor: "#e8a854", tailTip: "#f9e9c8" },
+    // Spotted rescue pup: red helmet, floppy ears, paw-print badge
+    { name: "PUP BOT", torso: "#dc2626", chest: "#b91c1c", accent: "#facc15",
+      head: "#f8fafc", arm: "#b91c1c", glove: "#dc2626", eyes: "#7dd3fc", bar: "#dc2626",
+      ears: "floppy", earColor: "#1f2937", spots: "#1f2937", muzzle: "#f8fafc",
+      cap: "#dc2626", bigEyes: true, pupil: "#1f2937", pawBadge: "#facc15",
+      tail: "wag", tailColor: "#f8fafc", tailTip: "#1f2937" },
+    // Blue overalls with gold buttons, letter cap, round nose over the mustache
+    { name: "RED PLUMBER", torso: "#1d4ed8", chest: "#1e40af", accent: "#dc2626",
+      head: "#e8b98a", arm: "#dc2626", glove: "#f8fafc", eyes: "#7dd3fc", bar: "#dc2626",
+      cap: "#dc2626", capBadge: "M", mustache: "#3f2a1e", nose: "#e8a06b",
+      bigEyes: true, pupil: "#2563eb", buttons: "#facc15" },
+    { name: "GREEN PLUMBER", torso: "#1d4ed8", chest: "#1e40af", accent: "#16a34a",
+      head: "#e8b98a", arm: "#16a34a", glove: "#f8fafc", eyes: "#7dd3fc", bar: "#22c55e",
+      cap: "#16a34a", capBadge: "L", mustache: "#2d1f14", nose: "#e8a06b",
+      bigEyes: true, pupil: "#16a34a", buttons: "#facc15" },
+    // Golden hair under a jeweled crown, pink gown, blue brooch
+    { name: "PRINCESS BOT", torso: "#ec4899", chest: "#f472b6", accent: "#38bdf8",
+      head: "#f5d0a9", arm: "#ec4899", glove: "#f8fafc", eyes: "#7dd3fc", bar: "#f472b6",
+      crown: "#fbbf24", mane: "#fcd34d", bigEyes: true, pupil: "#2563eb", brooch: "#38bdf8" },
+    // Little guy under a giant spotted mushroom dome, blue vest
+    { name: "MUSHROOM BOT", torso: "#1d4ed8", chest: "#1e40af", accent: "#fbbf24",
+      head: "#f5e5d0", arm: "#3b82f6", glove: "#f8fafc", eyes: "#e0f2fe", bar: "#f87171",
+      dome: "#f8fafc", domeSpots: "#dc2626", bigEyes: true, pupil: "#1f2937" },
+  ];
+  // 1% boss fight: a gigantic red dragon with more HP, harder claws, and a tail attack
+  const SKIN_DRAGON = {
+    name: "RED DRAGON", dragon: true, maxHp: 160, dmgBonus: 4,
+    torso: "#991b1b", chest: "#7f1d1d", accent: "#fbbf24",
+    head: "#b91c1c", arm: "#7f1d1d", glove: "#b91c1c", eyes: "#fde047", bar: "#dc2626",
+  };
+  // Odds: 50% blue, 10% green, 1% dragon, the other nine split the remaining 39%.
+  // A dragon encounter in progress overrides the roll — you owe it a rematch.
+  // Round 15 of a run (streak of 14) is always the dragon.
+  const pickSkin = () => {
+    if (record.dragonTries > 0) return SKIN_DRAGON;
+    if (record.streak + 1 === 15) return SKIN_DRAGON;
+    const r = Math.random();
+    if (r < 0.01) return SKIN_DRAGON;
+    if (r < 0.51) return SKIN_BLUE;
+    if (r < 0.61) return SKIN_GREEN;
+    return RARE_SKINS[Math.floor(Math.random() * RARE_SKINS.length)];
+  };
+
+  // ---------- DOM ----------
+  const canvas = document.getElementById("game");
+  const ctx = canvas.getContext("2d");
+  const overlay = document.getElementById("overlay");
+  const ovTitle = document.getElementById("ov-title");
+  const ovResult = document.getElementById("ov-result");
+  const ovText = document.getElementById("ov-text");
+  const ovGo = document.getElementById("ov-go");
+  const skinGrid = document.getElementById("skin-grid");
+
+  // roundRect shipped in Safari 16; fall back to plain rects before that
+  if (!CanvasRenderingContext2D.prototype.roundRect) {
+    CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h) {
+      this.rect(x, y, w, h);
+    };
+  }
+
+  const isTouch = window.matchMedia("(pointer: coarse)").matches || "ontouchstart" in window;
+  if (isTouch) document.body.classList.add("touch");
+
+  // ---------- Audio (synth lives in js/shared/audio.js; unlocked on first user gesture) ----------
+  const { ensureAudio, beep, thud } = window.GameAudio;
+  const sfx = {
+    hit:   () => { thud(0.09, 0.3); beep(130, 55, 0.12, "square", 0.22); },
+    clang: () => { beep(620, 240, 0.18, "square", 0.13); beep(930, 400, 0.12, "triangle", 0.1); },
+    whiff: () => beep(900, 300, 0.07, "sawtooth", 0.05),
+    hurt:  () => { thud(0.12, 0.3); beep(220, 70, 0.2, "sawtooth", 0.18); },
+    bell:  () => { beep(1320, null, 0.5, "triangle", 0.18); beep(1320, null, 0.5, "triangle", 0.18, 0.35); },
+    boing: () => { beep(180, 850, 0.16, "sine", 0.25); beep(850, 220, 0.4, "sine", 0.2, 0.16); },
+    roar:  () => { beep(140, 45, 0.7, "sawtooth", 0.22); beep(90, 38, 0.8, "square", 0.18, 0.08); },
+  };
+
+  // ---------- Persistent W-L record ----------
+  let record = { streak: 0, best: 0, dragonTries: 0 };
+  try {
+    const saved = JSON.parse(localStorage.getItem("sockbot-record"));
+    if (saved && typeof saved.streak === "number" && typeof saved.best === "number") {
+      record = {
+        streak: saved.streak,
+        best: saved.best,
+        dragonTries: typeof saved.dragonTries === "number" ? saved.dragonTries : 0,
+      };
+    }
+  } catch (e) { /* private browsing */ }
+  function saveRecord() {
+    try { localStorage.setItem("sockbot-record", JSON.stringify(record)); } catch (e) { /* private browsing */ }
+  }
+
+  // ---------- Game state ----------
+  let W = 0, H = 0;             // canvas size in CSS px
+  let state = "menu";           // menu | fight | ko | result | paused | select
+  let now = 0;                  // ms clock, advanced by dt
+  let fightT = 0;               // time since round start (for FIGHT! banner)
+  let koT = 0, winner = null;   // ko animation clock
+  let shakeT = 0, shakeMag = 0;
+  let particles = [];
+
+  const player = { hp: MAX_HP, blockHeld: false, punch: null, armCd: { L: 0, R: 0 }, globalCd: 0, hurtT: 0 };
+  const cpu = { hp: MAX_HP, maxHp: MAX_HP, st: "idle", t: 0, side: "L", level: 0, recoilT: 0, hitStreak: 0, streakT: 0, skin: SKIN_BLUE };
+  cpu.level = clamp(record.streak, 0, MAX_LEVEL); // level always tracks the current win streak
+
+  const playerBlocking = () => player.blockHeld && !player.punch;
+
+  // ---------- Sizing ----------
+  function resize() {
+    const stage = document.getElementById("stage");
+    W = stage.clientWidth;
+    H = stage.clientHeight;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  // ---------- Match flow ----------
+  let forcedSkin = null; // set by the secret sparring-gym picker; used once
+  function startFight() {
+    player.hp = MAX_HP; player.punch = null; player.armCd.L = 0; player.armCd.R = 0;
+    player.globalCd = 0; player.hurtT = 0;
+    cpu.skin = forcedSkin || pickSkin();
+    forcedSkin = null;
+    cpu.maxHp = cpu.skin.maxHp || MAX_HP;
+    cpu.hp = cpu.maxHp; cpu.st = "idle"; cpu.t = rand(400, 800); cpu.recoilT = 0; cpu.hitStreak = 0;
+    particles = [];
+    fightT = 0;
+    state = "fight";
+    skinGrid.hidden = true;
+    overlay.classList.add("hidden");
+    sfx.bell();
+    if (cpu.skin.dragon) sfx.roar();
+  }
+
+  function knockout(who) {
+    state = "ko";
+    winner = who; // "player" | "cpu"
+    koT = 0;
+    cpu.st = "idle"; // clear any mid-punch pose so it doesn't freeze over the KO animation
+    player.punch = null;
+    sfx.boing();
+    if (who === "player") {
+      record.streak++;
+      record.best = Math.max(record.best, record.streak);
+      cpu.level = clamp(record.streak, 0, MAX_LEVEL);
+      record.dragonTries = 0;
+    } else if (cpu.skin.dragon && record.dragonTries < DRAGON_TRIES - 1) {
+      record.dragonTries++; // the dragon grants a rematch — streak survives for now
+    } else {
+      record.streak = 0; // a loss ends the run — boss goes back to level 1
+      cpu.level = 0;
+      record.dragonTries = 0;
+    }
+    saveRecord();
+  }
+
+  function showMenu() {
+    ovTitle.textContent = "Sockbot Showdown";
+    ovResult.hidden = true;
+    skinGrid.hidden = true;
+    ovText.innerHTML = isTouch
+      ? "Jab with the corner buttons, hold <b>BLOCK</b> when the blue bot's glove flashes.<br>Block a punch to stun him — then swing away!"
+      : "<b>A</b> / <b>D</b> to jab, hold <b>S</b> (or Space) to block when the blue bot's glove flashes.<br>Block a punch to stun him — then swing away! <b>P</b> pauses.";
+    ovGo.textContent = isTouch ? "Tap to fight" : "Press any key to fight";
+    overlay.classList.remove("hidden");
+  }
+
+  function showResult() {
+    state = "result";
+    ovTitle.textContent = "Sockbot Showdown";
+    ovResult.hidden = false;
+    skinGrid.hidden = true;
+    if (winner === "player") {
+      ovResult.textContent = "YOU WIN! 🏆";
+      ovResult.style.color = "#4ade80";
+      ovText.innerHTML = (cpu.skin.dragon
+        ? "You knocked the dragon's block off! 🐉"
+        : "You knocked his block off!<br>He'll be faster next time…") +
+        `<br><br>Win streak: <b>${record.streak}</b> · Best: <b>${record.best}</b>`;
+    } else {
+      ovResult.textContent = "YOU LOSE 💥";
+      ovResult.style.color = "#f87171";
+      if (cpu.skin.dragon && record.dragonTries > 0) {
+        const left = DRAGON_TRIES - record.dragonTries;
+        ovText.innerHTML = "The dragon flattened you — but your streak survives.<br>" +
+          `It demands a rematch: <b>${left}</b> attempt${left === 1 ? "" : "s"} left.` +
+          `<br><br>Streak: <b>${record.streak}</b> · Best: <b>${record.best}</b>`;
+      } else if (cpu.skin.dragon) {
+        ovText.innerHTML = "Out of attempts — the dragon takes your streak.<br>Back to level 1." +
+          `<br><br>Best streak: <b>${record.best}</b>`;
+      } else {
+        ovText.innerHTML = "Your block got knocked off — streak over, boss back to level 1.<br>Watch for the glove flash and hold block." +
+          `<br><br>Best streak: <b>${record.best}</b>`;
+      }
+    }
+    ovGo.textContent = isTouch ? "Tap for a rematch" : "Press any key for a rematch";
+    overlay.classList.remove("hidden");
+  }
+
+  function togglePause() {
+    if (state === "fight") {
+      state = "paused";
+      ovTitle.textContent = "Paused";
+      ovResult.hidden = true;
+      skinGrid.hidden = true;
+      ovText.textContent = "";
+      ovGo.textContent = isTouch ? "Tap to resume" : "Press any key to resume";
+      overlay.classList.remove("hidden");
+    } else if (state === "paused") {
+      state = "fight";
+      overlay.classList.add("hidden");
+    }
+  }
+
+  // Secret sparring gym (undocumented): typing "tyuiop" stops the current
+  // round and offers every challenger, dragon included. Picking one restarts
+  // the round against them; everything else (streaks, levels) runs as normal.
+  const ALL_SKINS = [SKIN_BLUE, SKIN_GREEN, ...RARE_SKINS, SKIN_DRAGON];
+  function showSkinSelect() {
+    state = "select";
+    player.blockHeld = false;
+    ovTitle.textContent = "Sparring Gym";
+    ovResult.hidden = true;
+    ovText.textContent = "Pick your next opponent.";
+    ovGo.textContent = "";
+    skinGrid.innerHTML = "";
+    for (const sk of ALL_SKINS) {
+      const b = document.createElement("button");
+      b.textContent = sk.name;
+      b.style.borderColor = sk.bar;
+      b.addEventListener("pointerdown", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        ensureAudio();
+        forcedSkin = sk;
+        startFight();
+      });
+      skinGrid.appendChild(b);
+    }
+    skinGrid.hidden = false;
+    overlay.classList.remove("hidden");
+  }
+
+  // ---------- Combat ----------
+  function throwJab(side) {
+    if (state !== "fight" || fightT < 600) return;
+    if (player.punch || player.globalCd > 0 || player.armCd[side] > 0) return;
+    player.punch = { side, t: 0, landed: false };
+    player.armCd[side] = ARM_CD;
+    player.globalCd = GLOBAL_CD;
+    // cpu has a chance to see it coming and guard up
+    if (cpu.st === "idle" && Math.random() < 0.18 + 0.04 * cpu.level) {
+      cpu.st = "block"; cpu.t = rand(420, 640);
+    }
+  }
+
+  function resolvePlayerJab() {
+    const headPos = cpuHeadPos();
+    const speed = cpu.level / MAX_LEVEL;
+    if (cpu.st === "block") {
+      cpu.hp = Math.max(0, cpu.hp - CHIP_DMG);
+      sfx.clang();
+      spawnSparks(headPos.x, headPos.y + 40, "#cbd5e1", 6);
+      if (cpu.hp <= 0) return knockout("player");
+      // jabbing into his guard usually earns a fast counter
+      if (Math.random() < 0.5 + 0.05 * cpu.level) {
+        cpu.st = "windup";
+        cpu.side = Math.random() < 0.5 ? "L" : "R";
+        cpu.t = lerp(380, 250, speed);
+      }
+    } else {
+      let dmg = JAB_DMG + rand(-1, 3);
+      // hitting his wind-up only interrupts sometimes — otherwise he powers through
+      if (cpu.st === "windup" && Math.random() < 0.45 - 0.03 * cpu.level) {
+        dmg *= COUNTER_MULT;
+        cpu.st = "stunned"; cpu.t = STUN_MS;
+      }
+      cpu.hp = Math.max(0, cpu.hp - dmg);
+      cpu.recoilT = 200;
+      cpu.hitStreak++; cpu.streakT = 1200;
+      sfx.hit();
+      spawnSparks(headPos.x, headPos.y, "#fbbf24", 10);
+      shake(120, 5);
+      if (cpu.hp <= 0) return knockout("player");
+      // eats two quick hits -> guards up (unless already mid-attack)
+      if (cpu.hitStreak >= 2 && !["stunned", "windup", "punch", "tailwind", "tail"].includes(cpu.st)) {
+        cpu.hitStreak = 0;
+        cpu.st = "block"; cpu.t = rand(500, 800);
+      }
+    }
+  }
+
+  function resolveCpuPunch() {
+    if (playerBlocking()) {
+      sfx.clang();
+      spawnSparks(W / 2, H * 0.72, "#cbd5e1", 8);
+      cpu.st = "recover"; cpu.t = RECOVER_MS; // vulnerable window
+    } else {
+      player.hp = Math.max(0, player.hp - (CPU_DMG + rand(-1, 3) + Math.floor(cpu.level / 2) + (cpu.skin.dmgBonus || 0)));
+      player.hurtT = 350;
+      sfx.hurt();
+      shake(220, 11);
+      if (player.hp <= 0) return knockout("cpu");
+      // landed clean — often keeps swinging with the other glove
+      if (Math.random() < 0.35 + 0.05 * cpu.level) {
+        cpu.st = "windup";
+        cpu.side = cpu.side === "L" ? "R" : "L";
+        cpu.t = lerp(400, 260, cpu.level / MAX_LEVEL);
+      } else {
+        cpu.st = "recover"; cpu.t = RECOVER_MS * 0.5;
+      }
+    }
+  }
+
+  function resolveDragonTail() {
+    if (playerBlocking()) {
+      sfx.clang();
+      spawnSparks(W / 2, H * 0.72, "#cbd5e1", 10);
+      cpu.st = "recover"; cpu.t = RECOVER_MS; // big vulnerable window after a blocked sweep
+    } else {
+      player.hp = Math.max(0, player.hp - (TAIL_DMG + rand(0, 4)));
+      player.hurtT = 350;
+      sfx.hurt();
+      shake(260, 14);
+      if (player.hp <= 0) return knockout("cpu");
+      cpu.st = "recover"; cpu.t = RECOVER_MS * 0.5;
+    }
+  }
+
+  function updateCpu(dt) {
+    if (cpu.recoilT > 0) cpu.recoilT -= dt;
+    if (cpu.streakT > 0) { cpu.streakT -= dt; if (cpu.streakT <= 0) cpu.hitStreak = 0; }
+    cpu.t -= dt;
+    if (cpu.t > 0) return;
+    const speed = cpu.level / MAX_LEVEL; // 0..1
+    switch (cpu.st) {
+      case "idle": {
+        const roll = Math.random();
+        if (roll < 0.72) {
+          cpu.side = Math.random() < 0.5 ? "L" : "R";
+          if (cpu.skin.dragon && Math.random() < 0.4) {
+            cpu.st = "tailwind";
+            cpu.t = lerp(700, 430, speed);
+          } else {
+            cpu.st = "windup";
+            cpu.t = lerp(500, 280, speed);
+          }
+        } else if (roll < 0.88) {
+          cpu.st = "block"; cpu.t = rand(450, 750);
+        } else {
+          cpu.t = rand(250, 550); // shuffle in place
+        }
+        break;
+      }
+      case "windup": cpu.st = "punch"; cpu.t = CPU_PUNCH_MS; break;
+      case "tailwind": cpu.st = "tail"; cpu.t = TAIL_MS; sfx.whiff(); break;
+      case "punch": resolveCpuPunch(); break; // sets next state itself
+      case "tail": resolveDragonTail(); break;
+      case "block":
+        // often comes out of guard swinging
+        if (Math.random() < 0.45 + 0.04 * cpu.level) {
+          cpu.st = "windup";
+          cpu.side = Math.random() < 0.5 ? "L" : "R";
+          cpu.t = lerp(450, 280, speed);
+        } else {
+          cpu.st = "idle"; cpu.t = lerp(rand(400, 900), rand(150, 450), speed);
+        }
+        break;
+      case "recover":
+      case "stunned":
+        cpu.st = "idle"; cpu.t = lerp(rand(350, 800), rand(150, 400), speed);
+        break;
+    }
+  }
+
+  function updatePlayer(dt) {
+    player.armCd.L = Math.max(0, player.armCd.L - dt);
+    player.armCd.R = Math.max(0, player.armCd.R - dt);
+    player.globalCd = Math.max(0, player.globalCd - dt);
+    if (player.hurtT > 0) player.hurtT -= dt;
+    if (player.punch) {
+      const prev = player.punch.t;
+      player.punch.t += dt;
+      if (!player.punch.landed && prev < JAB_CONTACT && player.punch.t >= JAB_CONTACT) {
+        player.punch.landed = true;
+        resolvePlayerJab();
+      }
+      if (player.punch && player.punch.t >= JAB_DUR) player.punch = null;
+    }
+  }
+
+  // ---------- Effects ----------
+  function shake(ms, mag) { shakeT = ms; shakeMag = mag; }
+
+  function spawnSparks(x, y, color, n) {
+    for (let i = 0; i < n; i++) {
+      const a = rand(0, TAU), v = rand(0.08, 0.35);
+      particles.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 0.1, life: rand(250, 450), t: 0, color });
+    }
+  }
+
+  function updateParticles(dt) {
+    for (const p of particles) {
+      p.t += dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vy += 0.0009 * dt;
+    }
+    particles = particles.filter((p) => p.t < p.life);
+  }
+
+  // ---------- Layout helpers ----------
+  const S = () => Math.min(W, H) / 640; // world scale unit
+
+  function cpuHeadPos() {
+    const s = S();
+    let y = cpu.skin.dragon ? H * 0.30 : H * 0.34;
+    if (state === "ko" && winner === "player") y -= springOffset() * s;
+    return { x: W / 2, y };
+  }
+
+  function springOffset() {
+    // Head pops up with a bouncy overshoot, then settles high
+    const t = clamp(koT / 500, 0, 1);
+    const bounce = 1 - Math.pow(1 - t, 2) * Math.cos(t * 9);
+    return 130 * bounce;
+  }
+
+  // ---------- Drawing ----------
+  function drawRing(s) {
+    // Backdrop
+    const bg = ctx.createLinearGradient(0, 0, 0, H);
+    bg.addColorStop(0, "#0b0d1d");
+    bg.addColorStop(1, "#1a1e38");
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, H);
+
+    // Crowd dots
+    ctx.fillStyle = "rgba(255,255,255,0.06)";
+    for (let i = 0; i < 60; i++) {
+      const x = (i * 97.3) % W;
+      const y = (i * 53.7) % (H * 0.28);
+      ctx.fillRect(x, y, 3 * s, 3 * s);
+    }
+
+    // Yellow arena floor (trapezoid, like the toy base)
+    const backY = H * 0.42, backHalf = W * 0.34;
+    ctx.fillStyle = "#e0a92f";
+    ctx.beginPath();
+    ctx.moveTo(W / 2 - backHalf, backY);
+    ctx.lineTo(W / 2 + backHalf, backY);
+    ctx.lineTo(W / 2 + W * 0.85, H);
+    ctx.lineTo(W / 2 - W * 0.85, H);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "rgba(0,0,0,0.12)"; // floor shading
+    ctx.beginPath();
+    ctx.moveTo(W / 2 - backHalf, backY);
+    ctx.lineTo(W / 2 + backHalf, backY);
+    ctx.lineTo(W / 2 + W * 0.5, H * 0.62);
+    ctx.lineTo(W / 2 - W * 0.5, H * 0.62);
+    ctx.closePath();
+    ctx.fill();
+
+    // Ropes & corner posts
+    const postL = W / 2 - backHalf, postR = W / 2 + backHalf;
+    ctx.lineWidth = 3.5 * s;
+    const ropeColors = ["#ef4444", "#e2e8f0", "#3b82f6"];
+    for (let i = 0; i < 3; i++) {
+      const y = backY - (26 + i * 24) * s;
+      ctx.strokeStyle = ropeColors[i];
+      ctx.beginPath();
+      ctx.moveTo(postL, y);
+      ctx.lineTo(postR, y);
+      ctx.stroke();
+      // side ropes running past the camera
+      ctx.beginPath();
+      ctx.moveTo(postL, y);
+      ctx.lineTo(-W * 0.15, y + H * 0.55);
+      ctx.moveTo(postR, y);
+      ctx.lineTo(W * 1.15, y + H * 0.55);
+      ctx.stroke();
+    }
+    ctx.fillStyle = "#334155";
+    ctx.fillRect(postL - 6 * s, backY - 86 * s, 12 * s, 86 * s);
+    ctx.fillRect(postR - 6 * s, backY - 86 * s, 12 * s, 86 * s);
+  }
+
+  // Knocked-silly X eyes, shared by every face style
+  function drawXEyes(cx, cy, s) {
+    ctx.strokeStyle = "#fbbf24";
+    ctx.lineWidth = 3 * s;
+    for (const ex of [-18, 18]) {
+      ctx.beginPath();
+      ctx.moveTo(cx + (ex - 6) * s, cy - 6 * s); ctx.lineTo(cx + (ex + 6) * s, cy + 6 * s);
+      ctx.moveTo(cx + (ex + 6) * s, cy - 6 * s); ctx.lineTo(cx + (ex - 6) * s, cy + 6 * s);
+      ctx.stroke();
+    }
+  }
+
+  function drawCpu(s, t) {
+    const k = cpu.skin;
+    const cx = W / 2;
+    const bob = Math.sin(t * 0.003) * 5 * s;
+    const stunWob = cpu.st === "stunned" ? Math.sin(t * 0.02) * 8 * s : 0;
+    const recoil = cpu.recoilT > 0 ? (cpu.recoilT / 200) * 14 * s : 0;
+    const headY = H * 0.34 + bob - recoil;
+    const shoulderY = headY + 62 * s;
+    const koPop = state === "ko" && winner === "player" ? springOffset() * s : 0;
+    const hy = headY - koPop;
+
+    ctx.save();
+    ctx.translate(stunWob, 0);
+
+    // Pedestal stand
+    ctx.fillStyle = "#1f2937";
+    ctx.beginPath();
+    ctx.ellipse(cx, H * 0.60, 95 * s, 20 * s, 0, 0, TAU);
+    ctx.fill();
+    ctx.fillRect(cx - 26 * s, shoulderY + 100 * s, 52 * s, H * 0.60 - (shoulderY + 100 * s));
+
+    // Tail pokes out from behind the torso
+    if (k.tail === "wag") {
+      const wag = Math.sin(t * 0.008) * 0.25;
+      ctx.save();
+      ctx.translate(cx + 58 * s, shoulderY + 80 * s);
+      ctx.rotate(-0.8 + wag);
+      ctx.strokeStyle = k.tailColor;
+      ctx.lineWidth = 14 * s;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(48 * s, 0);
+      ctx.stroke();
+      ctx.strokeStyle = k.tailTip; // lighter tip
+      ctx.lineWidth = 10 * s;
+      ctx.beginPath();
+      ctx.moveTo(36 * s, 0);
+      ctx.lineTo(50 * s, 0);
+      ctx.stroke();
+      ctx.restore();
+    } else if (k.tail === "curl") {
+      ctx.strokeStyle = k.tailColor;
+      ctx.lineWidth = 9 * s;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.arc(cx - 80 * s, shoulderY + 78 * s, 26 * s, 0.3, Math.PI * 1.45);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(cx - 80 * s, shoulderY + 60 * s, 10 * s, Math.PI * 0.5, Math.PI * 2.2);
+      ctx.stroke();
+    }
+
+    // Torso
+    ctx.fillStyle = k.torso;
+    ctx.beginPath();
+    ctx.moveTo(cx - 78 * s, shoulderY);
+    ctx.lineTo(cx + 78 * s, shoulderY);
+    ctx.lineTo(cx + 52 * s, shoulderY + 120 * s);
+    ctx.lineTo(cx - 52 * s, shoulderY + 120 * s);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = k.chest; // chest plate
+    ctx.fillRect(cx - 34 * s, shoulderY + 18 * s, 68 * s, 46 * s);
+    const chestY = shoulderY + 41 * s;
+    if (k.spider) {
+      // Black spider emblem: legs first, body over them
+      ctx.strokeStyle = "#0f172a";
+      ctx.lineWidth = 2.5 * s;
+      ctx.lineCap = "round";
+      for (const sign of [-1, 1]) {
+        for (const [dy, ex, ey] of [[-5, 17, -15], [-1, 19, -4], [3, 18, 7], [6, 14, 16]]) {
+          ctx.beginPath();
+          ctx.moveTo(cx + sign * 3 * s, chestY + dy * s);
+          ctx.lineTo(cx + sign * ex * s, chestY + ey * s);
+          ctx.stroke();
+        }
+      }
+      ctx.fillStyle = "#0f172a";
+      ctx.beginPath();
+      ctx.ellipse(cx, chestY + 3 * s, 4.5 * s, 9 * s, 0, 0, TAU);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(cx, chestY - 9 * s, 3.5 * s, 0, TAU);
+      ctx.fill();
+    } else if (k.pawBadge) {
+      // Round rescue badge with a paw print
+      ctx.fillStyle = k.pawBadge;
+      ctx.beginPath();
+      ctx.arc(cx, chestY, 16 * s, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = "#7c2d12";
+      ctx.beginPath();
+      ctx.ellipse(cx, chestY + 4 * s, 6 * s, 5 * s, 0, 0, TAU);
+      ctx.fill();
+      for (const [dx, dy] of [[-7, -4], [0, -7], [7, -4]]) {
+        ctx.beginPath();
+        ctx.arc(cx + dx * s, chestY + dy * s, 2.8 * s, 0, TAU);
+        ctx.fill();
+      }
+    } else if (k.brooch) {
+      // Jewel brooch on the gown
+      ctx.fillStyle = k.brooch;
+      ctx.beginPath();
+      ctx.ellipse(cx, chestY, 9 * s, 11 * s, 0, 0, TAU);
+      ctx.fill();
+      ctx.strokeStyle = "#fbbf24";
+      ctx.lineWidth = 2.5 * s;
+      ctx.beginPath();
+      ctx.ellipse(cx, chestY, 9 * s, 11 * s, 0, 0, TAU);
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = k.accent;
+      ctx.fillRect(cx - 10 * s, shoulderY + 30 * s, 20 * s, 20 * s);
+    }
+    if (k.buttons) { // overall buttons at the strap corners
+      ctx.fillStyle = k.buttons;
+      for (const sign of [-1, 1]) {
+        ctx.beginPath();
+        ctx.arc(cx + sign * 25 * s, shoulderY + 25 * s, 5 * s, 0, TAU);
+        ctx.fill();
+      }
+    }
+
+    // Neck / spring
+    if (koPop > 0) {
+      ctx.strokeStyle = "#94a3b8";
+      ctx.lineWidth = 4 * s;
+      ctx.beginPath();
+      const segs = 7;
+      for (let i = 0; i <= segs; i++) {
+        const yy = shoulderY - (koPop * i) / segs;
+        const xx = cx + (i % 2 === 0 ? -10 : 10) * s;
+        i === 0 ? ctx.moveTo(xx, yy) : ctx.lineTo(xx, yy);
+      }
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = "#475569";
+      ctx.fillRect(cx - 14 * s, headY + 28 * s, 28 * s, 22 * s);
+    }
+
+    // Hair mane frames the head (drawn first, so the face sits on top)
+    if (k.mane) {
+      ctx.fillStyle = k.mane;
+      ctx.beginPath();
+      ctx.roundRect(cx - 62 * s, hy - 44 * s, 124 * s, 96 * s, 36 * s);
+      ctx.fill();
+    }
+
+    // Ears sit behind the head, so draw them first
+    if (k.ears === "round") {
+      for (const sign of [-1, 1]) {
+        ctx.fillStyle = k.head;
+        ctx.beginPath();
+        ctx.arc(cx + sign * 50 * s, hy - 8 * s, 18 * s, 0, TAU);
+        ctx.fill();
+        ctx.fillStyle = k.earColor;
+        ctx.beginPath();
+        ctx.arc(cx + sign * 50 * s, hy - 8 * s, 10 * s, 0, TAU);
+        ctx.fill();
+      }
+    } else if (k.ears === "dog") {
+      // Tall pointed heeler ears, two-tone with darker tips
+      for (const sign of [-1, 1]) {
+        ctx.fillStyle = k.earColor;
+        ctx.beginPath();
+        ctx.moveTo(cx + sign * 12 * s, hy - 26 * s);
+        ctx.lineTo(cx + sign * 46 * s, hy - 74 * s);
+        ctx.lineTo(cx + sign * 52 * s, hy - 28 * s);
+        ctx.closePath();
+        ctx.fill();
+        if (k.earInner) {
+          ctx.fillStyle = k.earInner;
+          ctx.beginPath();
+          ctx.moveTo(cx + sign * 26 * s, hy - 34 * s);
+          ctx.lineTo(cx + sign * 43 * s, hy - 58 * s);
+          ctx.lineTo(cx + sign * 46 * s, hy - 34 * s);
+          ctx.closePath();
+          ctx.fill();
+        }
+      }
+    } else if (k.ears === "floppy") {
+      // Droopy pup ears hanging beside the helmet
+      ctx.fillStyle = k.earColor;
+      for (const sign of [-1, 1]) {
+        ctx.save();
+        ctx.translate(cx + sign * 50 * s, hy - 2 * s);
+        ctx.rotate(sign * 0.35);
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 13 * s, 27 * s, 0, 0, TAU);
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    // Head
+    ctx.fillStyle = k.head;
+    ctx.beginPath();
+    ctx.roundRect(cx - 48 * s, hy - 34 * s, 96 * s, 70 * s, 16 * s);
+    ctx.fill();
+    // Web-mask pattern
+    if (k.web) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.roundRect(cx - 48 * s, hy - 34 * s, 96 * s, 70 * s, 16 * s);
+      ctx.clip();
+      ctx.strokeStyle = "rgba(15, 23, 42, 0.5)";
+      ctx.lineWidth = 1.5 * s;
+      for (let i = 0; i < 8; i++) {
+        const a = (i * TAU) / 8;
+        ctx.beginPath();
+        ctx.moveTo(cx, hy);
+        ctx.lineTo(cx + Math.cos(a) * 95 * s, hy + Math.sin(a) * 95 * s);
+        ctx.stroke();
+      }
+      for (let r = 18; r <= 66; r += 16) {
+        ctx.beginPath();
+        ctx.arc(cx, hy, r * s, 0, TAU);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+    // Fur markings, clipped to the head (heeler masks, dalmatian spots)
+    if (k.eyeMask || k.blaze || k.spots) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.roundRect(cx - 48 * s, hy - 34 * s, 96 * s, 70 * s, 16 * s);
+      ctx.clip();
+      if (k.eyeMask) {
+        // Dark patches around each eye, running up to the ears; the strip
+        // between them stays coat-colored
+        ctx.fillStyle = k.eyeMask;
+        for (const sign of [-1, 1]) {
+          ctx.beginPath();
+          ctx.ellipse(cx + sign * 26 * s, hy - 14 * s, 24 * s, 28 * s, 0, 0, TAU);
+          ctx.fill();
+        }
+        if (k.brows) { // little light eyebrows on the masks
+          ctx.fillStyle = k.brows;
+          for (const sign of [-1, 1]) {
+            ctx.beginPath();
+            ctx.ellipse(cx + sign * 20 * s, hy - 25 * s, 7 * s, 3.5 * s, 0, 0, TAU);
+            ctx.fill();
+          }
+        }
+      }
+      if (k.blaze) {
+        // Light snout stripe continuing up the forehead between the masks
+        ctx.fillStyle = k.blaze;
+        ctx.beginPath();
+        ctx.roundRect(cx - 9 * s, hy - 34 * s, 18 * s, 50 * s, 9 * s);
+        ctx.fill();
+      }
+      if (k.spots) {
+        ctx.fillStyle = k.spots;
+        for (const [dx, dy, rr] of [[-30, -18, 8], [24, -24, 7], [38, 8, 9], [-42, 14, 7]]) {
+          ctx.beginPath();
+          ctx.arc(cx + dx * s, hy + dy * s, rr * s, 0, TAU);
+          ctx.fill();
+        }
+      }
+      ctx.restore();
+    }
+    // Chimp face patch: two joined light ovals around the eyes
+    if (k.facePatch) {
+      ctx.fillStyle = k.facePatch;
+      for (const sign of [-1, 1]) {
+        ctx.beginPath();
+        ctx.ellipse(cx + sign * 18 * s, hy - 4 * s, 21 * s, 19 * s, 0, 0, TAU);
+        ctx.fill();
+      }
+    }
+    // Antenna (skipped when headgear swallows it)
+    if (!k.dome && !k.crown) {
+      ctx.strokeStyle = "#94a3b8";
+      ctx.lineWidth = 3 * s;
+      ctx.beginPath();
+      ctx.moveTo(cx, hy - 34 * s);
+      ctx.lineTo(cx, hy - 52 * s);
+      ctx.stroke();
+      ctx.fillStyle = "#f87171";
+      ctx.beginPath();
+      ctx.arc(cx, hy - 55 * s, 5 * s, 0, TAU);
+      ctx.fill();
+    }
+    // Cap (rescue-pup helmet, plumber caps)
+    if (k.cap) {
+      ctx.fillStyle = k.cap;
+      ctx.beginPath();
+      ctx.ellipse(cx, hy - 40 * s, 37 * s, 15 * s, 0, 0, TAU); // rounded top
+      ctx.fill();
+      ctx.beginPath();
+      ctx.roundRect(cx - 40 * s, hy - 44 * s, 80 * s, 18 * s, 8 * s);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(cx, hy - 27 * s, 52 * s, 7 * s, 0, 0, TAU); // brim
+      ctx.fill();
+      if (k.capBadge) { // white disc with the big letter
+        ctx.save();
+        ctx.fillStyle = "#f8fafc";
+        ctx.beginPath();
+        ctx.arc(cx, hy - 38 * s, 11 * s, 0, TAU);
+        ctx.fill();
+        ctx.fillStyle = k.cap;
+        ctx.font = `800 ${Math.round(15 * s)}px -apple-system, sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(k.capBadge, cx, hy - 37 * s);
+        ctx.restore();
+      }
+    }
+    // Giant mushroom dome with spots
+    if (k.dome) {
+      ctx.fillStyle = k.dome;
+      ctx.beginPath();
+      ctx.ellipse(cx, hy - 24 * s, 64 * s, 36 * s, 0, 0, TAU);
+      ctx.fill();
+      ctx.save();
+      ctx.beginPath();
+      ctx.ellipse(cx, hy - 24 * s, 64 * s, 36 * s, 0, 0, TAU);
+      ctx.clip();
+      ctx.fillStyle = k.domeSpots;
+      for (const [dx, dy, rr] of [[-42, -22, 14], [2, -44, 16], [44, -22, 14], [0, -6, 11]]) {
+        ctx.beginPath();
+        ctx.arc(cx + dx * s, hy + dy * s, rr * s, 0, TAU);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+    // Crown with jewels
+    if (k.crown) {
+      ctx.fillStyle = k.crown;
+      ctx.beginPath();
+      ctx.moveTo(cx - 26 * s, hy - 34 * s);
+      ctx.lineTo(cx - 26 * s, hy - 54 * s);
+      ctx.lineTo(cx - 13 * s, hy - 42 * s);
+      ctx.lineTo(cx, hy - 56 * s);
+      ctx.lineTo(cx + 13 * s, hy - 42 * s);
+      ctx.lineTo(cx + 26 * s, hy - 54 * s);
+      ctx.lineTo(cx + 26 * s, hy - 34 * s);
+      ctx.closePath();
+      ctx.fill();
+      for (const [dx, col] of [[-14, "#dc2626"], [0, "#3b82f6"], [14, "#dc2626"]]) {
+        ctx.fillStyle = col;
+        ctx.beginPath();
+        ctx.arc(cx + dx * s, hy - 39 * s, 3 * s, 0, TAU);
+        ctx.fill();
+      }
+    }
+    // Face: cartoon eyes, bead eyes, hero lenses, or the classic robot visor
+    const zonked = cpu.st === "stunned" || (state === "ko" && winner === "player");
+    const angry = cpu.st === "windup" || cpu.st === "punch";
+    if (k.bigEyes) {
+      // Big white cartoon eyes with round pupils (red + eyebrows when attacking)
+      const eyeY = hy + (k.dome ? 20 : -3) * s;
+      const ery = (k.dome ? 10 : 14) * s;
+      for (const sign of [-1, 1]) {
+        const ex = cx + sign * 20 * s;
+        ctx.fillStyle = "#f8fafc";
+        ctx.beginPath();
+        ctx.ellipse(ex, eyeY, 12 * s, ery, 0, 0, TAU);
+        ctx.fill();
+        if (!zonked) {
+          ctx.fillStyle = angry ? "#dc2626" : (k.pupil || "#1f2937");
+          ctx.beginPath();
+          ctx.arc(ex, eyeY + ery * 0.25, 5 * s, 0, TAU);
+          ctx.fill();
+        }
+      }
+      if (angry && !zonked) {
+        ctx.strokeStyle = "#1f2937";
+        ctx.lineWidth = 4 * s;
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(cx - 32 * s, eyeY - ery - 8 * s); ctx.lineTo(cx - 8 * s, eyeY - ery + 2 * s);
+        ctx.moveTo(cx + 32 * s, eyeY - ery - 8 * s); ctx.lineTo(cx + 8 * s, eyeY - ery + 2 * s);
+        ctx.stroke();
+      }
+      if (zonked) drawXEyes(cx, eyeY, s);
+    } else if (k.beadEyes) {
+      // Small dark chimp eyes on the face patch
+      if (zonked) {
+        drawXEyes(cx, hy - 5 * s, s);
+      } else {
+        ctx.fillStyle = angry ? "#dc2626" : k.beadEyes;
+        for (const sign of [-1, 1]) {
+          ctx.beginPath();
+          ctx.arc(cx + sign * 18 * s, hy - 5 * s, 6 * s, 0, TAU);
+          ctx.fill();
+        }
+      }
+    } else if (k.lenses) {
+      // Big white angled hero lenses with dark outlines
+      for (const sign of [-1, 1]) {
+        ctx.save();
+        ctx.translate(cx + sign * 22 * s, hy - 2 * s);
+        ctx.rotate(sign * -0.35);
+        ctx.fillStyle = angry ? "#fecaca" : "#f8fafc";
+        ctx.strokeStyle = "#0f172a";
+        ctx.lineWidth = 3 * s;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 17 * s, 10 * s, 0, 0, TAU);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      }
+      if (zonked) drawXEyes(cx, hy - 2 * s, s);
+    } else {
+      // Classic robot visor + square eyes
+      ctx.fillStyle = "#0f172a";
+      ctx.beginPath();
+      ctx.roundRect(cx - 36 * s, hy - 14 * s, 72 * s, 22 * s, 8 * s);
+      ctx.fill();
+      if (zonked) {
+        drawXEyes(cx, hy - 3 * s, s);
+      } else {
+        ctx.fillStyle = angry ? "#fb7185" : k.eyes;
+        ctx.fillRect(cx - 24 * s, hy - 9 * s, 12 * s, 12 * s);
+        ctx.fillRect(cx + 12 * s, hy - 9 * s, 12 * s, 12 * s);
+      }
+    }
+    // Mustache
+    if (k.mustache) {
+      ctx.fillStyle = k.mustache;
+      ctx.beginPath();
+      ctx.roundRect(cx - 24 * s, hy + 11 * s, 48 * s, 11 * s, 5.5 * s);
+      ctx.fill();
+    }
+    // Big round nose sits over the mustache
+    if (k.nose) {
+      ctx.fillStyle = k.nose;
+      ctx.beginPath();
+      ctx.arc(cx, hy + 6 * s, 9 * s, 0, TAU);
+      ctx.fill();
+    }
+    // Muzzle: chimp gets nostrils + grin, pups get the classic dog nose
+    if (k.muzzle) {
+      ctx.fillStyle = k.muzzle;
+      ctx.beginPath();
+      ctx.roundRect(cx - 26 * s, hy + 12 * s, 52 * s, 22 * s, 10 * s);
+      ctx.fill();
+      if (k.nostrils) {
+        ctx.fillStyle = "#3f2a1e";
+        for (const sign of [-1, 1]) {
+          ctx.beginPath();
+          ctx.arc(cx + sign * 7 * s, hy + 19 * s, 2.5 * s, 0, TAU);
+          ctx.fill();
+        }
+        ctx.strokeStyle = "#3f2a1e";
+        ctx.lineWidth = 2.5 * s;
+        ctx.beginPath();
+        ctx.arc(cx, hy + 23 * s, 8 * s, Math.PI * 0.15, Math.PI * 0.85);
+        ctx.stroke();
+      } else {
+        if (k.muzzleInner) { // inner muzzle patch around the nose
+          ctx.fillStyle = k.muzzleInner;
+          ctx.beginPath();
+          ctx.roundRect(cx - 16 * s, hy + 14 * s, 32 * s, 18 * s, 8 * s);
+          ctx.fill();
+        }
+        const noseColor = k.noseColor || "#1f2937";
+        ctx.fillStyle = noseColor;
+        ctx.beginPath();
+        ctx.ellipse(cx, hy + 18 * s, 8 * s, 5 * s, 0, 0, TAU);
+        ctx.fill();
+        if (k.smile) {
+          ctx.strokeStyle = noseColor;
+          ctx.lineWidth = 2.5 * s;
+          ctx.beginPath();
+          ctx.arc(cx, hy + 23 * s, 8 * s, Math.PI * 0.15, Math.PI * 0.85);
+          ctx.stroke();
+        }
+      }
+    }
+
+    // Stun stars
+    if (cpu.st === "stunned") {
+      ctx.fillStyle = "#fbbf24";
+      ctx.font = `${Math.round(18 * s)}px -apple-system, sans-serif`;
+      for (let i = 0; i < 3; i++) {
+        const a = t * 0.005 + (i * TAU) / 3;
+        ctx.fillText("✶", cx + Math.cos(a) * 64 * s - 8 * s, hy - 40 * s + Math.sin(a) * 12 * s);
+      }
+    }
+
+    // Arms + gloves (skip the punching arm here; it's drawn over the player layer)
+    for (const side of ["L", "R"]) {
+      const sign = side === "L" ? -1 : 1;
+      const shoulder = { x: cx + sign * 78 * s, y: shoulderY + 8 * s };
+      let glove;
+      if (cpu.st === "block") {
+        glove = { x: cx + sign * 30 * s, y: hy + 4 * s, r: 30 * s };
+      } else if ((cpu.st === "windup" || cpu.st === "punch") && cpu.side === side) {
+        if (cpu.st === "punch") continue;
+        glove = { x: cx + sign * 130 * s, y: shoulderY - 30 * s, r: 32 * s };
+      } else if (cpu.st === "stunned") {
+        glove = { x: cx + sign * 105 * s, y: shoulderY + 95 * s, r: 30 * s };
+      } else {
+        glove = { x: cx + sign * 92 * s, y: shoulderY + 46 * s + bob, r: 30 * s };
+      }
+      ctx.strokeStyle = k.arm;
+      ctx.lineWidth = 16 * s;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(shoulder.x, shoulder.y);
+      ctx.lineTo(glove.x, glove.y);
+      ctx.stroke();
+      ctx.fillStyle = k.glove;
+      ctx.beginPath();
+      ctx.arc(glove.x, glove.y, glove.r, 0, TAU);
+      ctx.fill();
+      // Warning flash on the winding-up glove
+      if (cpu.st === "windup" && cpu.side === side && Math.sin(t * 0.025) > -0.2) {
+        ctx.strokeStyle = "#fbbf24";
+        ctx.lineWidth = 5 * s;
+        ctx.beginPath();
+        ctx.arc(glove.x, glove.y, glove.r + 7 * s, 0, TAU);
+        ctx.stroke();
+      }
+    }
+
+    // White flash when he takes a hit
+    if (cpu.recoilT > 0) {
+      ctx.fillStyle = `rgba(255,255,255,${0.4 * (cpu.recoilT / 200)})`;
+      ctx.beginPath();
+      ctx.roundRect(cx - 48 * s, hy - 34 * s, 96 * s, 70 * s, 16 * s);
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+
+  // Small filled triangle used for the dragon's tail spade and talons
+  function drawSpade(x, y, ang, size, color) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(ang);
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(size, 0);
+    ctx.lineTo(-size * 0.5, -size * 0.6);
+    ctx.lineTo(-size * 0.5, size * 0.6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // The 1% boss: everything ~1.5x robot scale, plus wings, horns, talons, and a live tail
+  function drawDragon(s, t) {
+    const k = cpu.skin;
+    const d = s * 1.5;
+    const cx = W / 2;
+    const bob = Math.sin(t * 0.0025) * 6 * s;
+    const stunWob = cpu.st === "stunned" ? Math.sin(t * 0.02) * 10 * s : 0;
+    const recoil = cpu.recoilT > 0 ? (cpu.recoilT / 200) * 14 * s : 0;
+    const headY = H * 0.30 + bob - recoil;
+    const shoulderY = headY + 74 * d;
+    const koPop = state === "ko" && winner === "player" ? springOffset() * s * 1.3 : 0;
+    const hy = headY - koPop;
+
+    ctx.save();
+    ctx.translate(stunWob, 0);
+
+    // Tail (behind the body): sways at rest, rears up beside the screen while telegraphing
+    if (cpu.st !== "tail") {
+      const rearing = cpu.st === "tailwind";
+      const sign = rearing ? (cpu.side === "L" ? -1 : 1) : 1;
+      const base = { x: cx + sign * 30 * d, y: shoulderY + 115 * d };
+      const ctrl = rearing
+        ? { x: cx + sign * 210 * d, y: shoulderY + 10 * d }
+        : { x: cx + sign * 165 * d, y: shoulderY + 55 * d };
+      const tip = rearing
+        ? { x: cx + sign * 150 * d, y: hy - 30 * d }
+        : { x: cx + sign * 170 * d + Math.sin(t * 0.002) * 24 * s, y: shoulderY - 55 * d };
+      ctx.strokeStyle = k.torso;
+      ctx.lineWidth = 20 * d;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(base.x, base.y);
+      ctx.quadraticCurveTo(ctrl.x, ctrl.y, tip.x, tip.y);
+      ctx.stroke();
+      drawSpade(tip.x, tip.y, Math.atan2(tip.y - ctrl.y, tip.x - ctrl.x), 24 * d, k.head);
+      if (rearing && Math.sin(t * 0.025) > -0.2) {
+        ctx.strokeStyle = "#fbbf24";
+        ctx.lineWidth = 5 * s;
+        ctx.beginPath();
+        ctx.arc(tip.x, tip.y, 36 * d, 0, TAU);
+        ctx.stroke();
+      }
+    }
+
+    // Wings
+    ctx.fillStyle = "#7f1d1d";
+    for (const sign of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(cx + sign * 55 * d, shoulderY + 5 * d);
+      ctx.lineTo(cx + sign * 185 * d, shoulderY - 95 * d);
+      ctx.lineTo(cx + sign * 150 * d, shoulderY + 25 * d);
+      ctx.lineTo(cx + sign * 80 * d, shoulderY + 55 * d);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Pedestal stand (yes, even the dragon is a toy on a stand)
+    ctx.fillStyle = "#1f2937";
+    ctx.beginPath();
+    ctx.ellipse(cx, H * 0.62, 130 * d, 24 * s, 0, 0, TAU);
+    ctx.fill();
+    ctx.fillRect(cx - 34 * d, shoulderY + 145 * d, 68 * d, Math.max(0, H * 0.62 - (shoulderY + 145 * d)));
+
+    // Torso + belly plates
+    ctx.fillStyle = k.torso;
+    ctx.beginPath();
+    ctx.moveTo(cx - 105 * d, shoulderY);
+    ctx.lineTo(cx + 105 * d, shoulderY);
+    ctx.lineTo(cx + 68 * d, shoulderY + 150 * d);
+    ctx.lineTo(cx - 68 * d, shoulderY + 150 * d);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = k.chest;
+    ctx.beginPath();
+    ctx.roundRect(cx - 44 * d, shoulderY + 20 * d, 88 * d, 110 * d, 18 * d);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(0,0,0,0.25)";
+    ctx.lineWidth = 3 * s;
+    for (let i = 1; i <= 4; i++) {
+      const yy = shoulderY + 20 * d + (110 * d * i) / 5;
+      ctx.beginPath();
+      ctx.moveTo(cx - 40 * d, yy);
+      ctx.lineTo(cx + 40 * d, yy);
+      ctx.stroke();
+    }
+
+    // Neck / spring
+    if (koPop > 0) {
+      ctx.strokeStyle = "#94a3b8";
+      ctx.lineWidth = 5 * s;
+      ctx.beginPath();
+      const segs = 7;
+      for (let i = 0; i <= segs; i++) {
+        const yy = shoulderY - (koPop * i) / segs;
+        const xx = cx + (i % 2 === 0 ? -14 : 14) * s;
+        i === 0 ? ctx.moveTo(xx, yy) : ctx.lineTo(xx, yy);
+      }
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = "#7f1d1d";
+      ctx.fillRect(cx - 20 * d, headY + 40 * d, 40 * d, 36 * d);
+    }
+
+    // Head
+    ctx.fillStyle = k.head;
+    ctx.beginPath();
+    ctx.roundRect(cx - 65 * d, hy - 40 * d, 130 * d, 88 * d, 22 * d);
+    ctx.fill();
+    // Horns
+    ctx.fillStyle = "#e7d8b0";
+    for (const sign of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(cx + sign * 22 * d, hy - 38 * d);
+      ctx.lineTo(cx + sign * 52 * d, hy - 78 * d);
+      ctx.lineTo(cx + sign * 44 * d, hy - 34 * d);
+      ctx.closePath();
+      ctx.fill();
+    }
+    // Snout + nostrils
+    ctx.fillStyle = "#dc2626";
+    ctx.beginPath();
+    ctx.roundRect(cx - 36 * d, hy + 10 * d, 72 * d, 34 * d, 14 * d);
+    ctx.fill();
+    ctx.fillStyle = "#450a0a";
+    ctx.beginPath();
+    ctx.ellipse(cx - 14 * d, hy + 24 * d, 5 * d, 7 * d, 0, 0, TAU);
+    ctx.ellipse(cx + 14 * d, hy + 24 * d, 5 * d, 7 * d, 0, 0, TAU);
+    ctx.fill();
+    // Eyes
+    if (cpu.st === "stunned" || (state === "ko" && winner === "player")) {
+      ctx.strokeStyle = "#fbbf24";
+      ctx.lineWidth = 4 * s;
+      for (const ex of [-38, 38]) {
+        ctx.beginPath();
+        ctx.moveTo(cx + (ex - 9) * d, hy - 17 * d); ctx.lineTo(cx + (ex + 9) * d, hy + 1 * d);
+        ctx.moveTo(cx + (ex + 9) * d, hy - 17 * d); ctx.lineTo(cx + (ex - 9) * d, hy + 1 * d);
+        ctx.stroke();
+      }
+    } else {
+      const angry = ["windup", "punch", "tailwind", "tail"].includes(cpu.st);
+      ctx.fillStyle = angry ? "#fb7185" : k.eyes;
+      for (const sign of [-1, 1]) {
+        ctx.beginPath();
+        ctx.roundRect(cx + sign * 38 * d - 12 * d, hy - 16 * d, 24 * d, 18 * d, 6 * d);
+        ctx.fill();
+      }
+      ctx.fillStyle = "#0f172a";
+      for (const sign of [-1, 1]) {
+        ctx.fillRect(cx + sign * 38 * d - 2.5 * d, hy - 15 * d, 5 * d, 16 * d);
+      }
+    }
+    // Stun stars
+    if (cpu.st === "stunned") {
+      ctx.fillStyle = "#fbbf24";
+      ctx.font = `${Math.round(22 * s)}px -apple-system, sans-serif`;
+      for (let i = 0; i < 3; i++) {
+        const a = t * 0.005 + (i * TAU) / 3;
+        ctx.fillText("✶", cx + Math.cos(a) * 90 * d - 10 * s, hy - 50 * d + Math.sin(a) * 14 * s);
+      }
+    }
+
+    // Arms + clawed fists (skip the punching arm; the incoming-glove pass draws it)
+    for (const side of ["L", "R"]) {
+      const sign = side === "L" ? -1 : 1;
+      const shoulder = { x: cx + sign * 100 * d, y: shoulderY + 14 * d };
+      let claw;
+      if (cpu.st === "block") {
+        claw = { x: cx + sign * 40 * d, y: hy + 6 * d, r: 38 * d };
+      } else if ((cpu.st === "windup" || cpu.st === "punch") && cpu.side === side) {
+        if (cpu.st === "punch") continue;
+        claw = { x: cx + sign * 165 * d, y: shoulderY - 38 * d, r: 40 * d };
+      } else if (cpu.st === "stunned") {
+        claw = { x: cx + sign * 130 * d, y: shoulderY + 115 * d, r: 38 * d };
+      } else {
+        claw = { x: cx + sign * 118 * d, y: shoulderY + 58 * d + bob, r: 38 * d };
+      }
+      ctx.strokeStyle = k.arm;
+      ctx.lineWidth = 22 * d;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(shoulder.x, shoulder.y);
+      ctx.lineTo(claw.x, claw.y);
+      ctx.stroke();
+      ctx.fillStyle = k.glove;
+      ctx.beginPath();
+      ctx.arc(claw.x, claw.y, claw.r, 0, TAU);
+      ctx.fill();
+      for (let i = -1; i <= 1; i++) {
+        const a = Math.PI / 2 + i * 0.55;
+        drawSpade(claw.x + Math.cos(a) * claw.r * 0.85, claw.y + Math.sin(a) * claw.r * 0.85, a, 13 * d, "#e7d8b0");
+      }
+      if (cpu.st === "windup" && cpu.side === side && Math.sin(t * 0.025) > -0.2) {
+        ctx.strokeStyle = "#fbbf24";
+        ctx.lineWidth = 5 * s;
+        ctx.beginPath();
+        ctx.arc(claw.x, claw.y, claw.r + 8 * s, 0, TAU);
+        ctx.stroke();
+      }
+    }
+
+    // White flash when he takes a hit
+    if (cpu.recoilT > 0) {
+      ctx.fillStyle = `rgba(255,255,255,${0.4 * (cpu.recoilT / 200)})`;
+      ctx.beginPath();
+      ctx.roundRect(cx - 65 * d, hy - 40 * d, 130 * d, 88 * d, 22 * d);
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+
+  // The tail sweep whips around the side of the screen at the player — drawn on top
+  function drawDragonTailSweep(s) {
+    if (!cpu.skin.dragon || cpu.st !== "tail") return;
+    const d = s * 1.5;
+    const sign = cpu.side === "L" ? -1 : 1;
+    const p = 1 - cpu.t / TAIL_MS; // 0 -> 1
+    const base = { x: W / 2 + sign * 40 * d, y: H * 0.58 };
+    const ctrl = { x: W / 2 + sign * W * 0.5, y: H * 0.42 };
+    const tip = { x: lerp(W / 2 + sign * W * 0.55, W / 2, p), y: lerp(H * 0.40, H * 0.78, p) };
+    ctx.strokeStyle = cpu.skin.torso;
+    ctx.lineWidth = lerp(24 * d, 34 * d, p);
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(base.x, base.y);
+    ctx.quadraticCurveTo(ctrl.x, ctrl.y, tip.x, tip.y);
+    ctx.stroke();
+    drawSpade(tip.x, tip.y, Math.atan2(tip.y - ctrl.y, tip.x - ctrl.x), lerp(28 * d, 40 * d, p), cpu.skin.head);
+  }
+
+  // The cpu's punching glove flies at the camera — drawn on top of everything
+  function drawCpuIncomingGlove(s) {
+    if (cpu.st !== "punch") return;
+    const sign = cpu.side === "L" ? -1 : 1;
+    const p = 1 - cpu.t / CPU_PUNCH_MS; // 0 -> 1
+    const x = lerp(W / 2 + sign * 130 * s, W / 2 + sign * 46 * s, p);
+    const y = lerp(H * 0.40, H * 0.78, p);
+    const r = lerp(32 * s, 98 * s, p * p);
+    ctx.strokeStyle = cpu.skin.arm;
+    ctx.lineWidth = lerp(16 * s, 34 * s, p);
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(W / 2 + sign * 78 * s, H * 0.44);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    ctx.fillStyle = cpu.skin.glove;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,0.25)";
+    ctx.beginPath();
+    ctx.arc(x - r * 0.3, y - r * 0.3, r * 0.35, 0, TAU);
+    ctx.fill();
+  }
+
+  function drawPlayer(s, t) {
+    const cx = W / 2;
+    const bob = Math.sin(t * 0.0026 + 1.3) * 4 * s;
+    const koDrop = state === "ko" && winner === "cpu" ? clamp(koT / 400, 0, 1) * 70 * s : 0;
+    const headTop = H - 92 * s + bob + koDrop;
+    const koPop = state === "ko" && winner === "cpu" ? springOffset() * s : 0;
+
+    // Shoulders hint
+    ctx.fillStyle = "#7f1d1d";
+    ctx.beginPath();
+    ctx.ellipse(cx, H + 30 * s, 240 * s, 110 * s, 0, Math.PI, TAU);
+    ctx.fill();
+
+    // Spring on KO (our head pops too)
+    if (koPop > 0) {
+      ctx.strokeStyle = "#94a3b8";
+      ctx.lineWidth = 5 * s;
+      ctx.beginPath();
+      const segs = 7;
+      for (let i = 0; i <= segs; i++) {
+        const yy = H - 30 * s - (koPop * i) / segs;
+        const xx = cx + (i % 2 === 0 ? -12 : 12) * s;
+        i === 0 ? ctx.moveTo(xx, yy) : ctx.lineTo(xx, yy);
+      }
+      ctx.stroke();
+    }
+
+    // Back of our head
+    ctx.fillStyle = "#dc2626";
+    ctx.beginPath();
+    ctx.roundRect(cx - 70 * s, headTop - koPop, 140 * s, 130 * s, 26 * s);
+    ctx.fill();
+    ctx.fillStyle = "#991b1b";
+    ctx.fillRect(cx - 70 * s, headTop - koPop + 46 * s, 140 * s, 12 * s);
+    // Antenna
+    ctx.strokeStyle = "#94a3b8";
+    ctx.lineWidth = 3.5 * s;
+    ctx.beginPath();
+    ctx.moveTo(cx, headTop - koPop);
+    ctx.lineTo(cx, headTop - koPop - 20 * s);
+    ctx.stroke();
+    ctx.fillStyle = "#fbbf24";
+    ctx.beginPath();
+    ctx.arc(cx, headTop - koPop - 24 * s, 5.5 * s, 0, TAU);
+    ctx.fill();
+
+    // Gloves
+    const anchors = {
+      L: { x: cx - 195 * s, y: H - 85 * s },
+      R: { x: cx + 195 * s, y: H - 85 * s },
+    };
+    const blockPos = {
+      L: { x: cx - 62 * s, y: H - 195 * s },
+      R: { x: cx + 62 * s, y: H - 195 * s },
+    };
+    const target = cpuHeadPos();
+    for (const side of ["L", "R"]) {
+      let x, y, r;
+      if (player.punch && player.punch.side === side) {
+        // out fast, back slower
+        const pt = player.punch.t;
+        const p = pt <= JAB_CONTACT ? pt / JAB_CONTACT : 1 - (pt - JAB_CONTACT) / (JAB_DUR - JAB_CONTACT);
+        const e = p * p * (3 - 2 * p); // smoothstep
+        x = lerp(anchors[side].x, target.x + (side === "L" ? -20 : 20) * s, e);
+        y = lerp(anchors[side].y, target.y + 30 * s, e);
+        r = lerp(58 * s, 24 * s, e);
+      } else if (playerBlocking()) {
+        x = blockPos[side].x; y = blockPos[side].y; r = 58 * s;
+      } else {
+        x = anchors[side].x; y = anchors[side].y + bob; r = 58 * s;
+      }
+      ctx.fillStyle = "#ef4444";
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = "#b91c1c";
+      ctx.beginPath();
+      ctx.arc(x, y + r * 0.45, r * 0.62, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,0.28)";
+      ctx.beginPath();
+      ctx.arc(x - r * 0.32, y - r * 0.32, r * 0.3, 0, TAU);
+      ctx.fill();
+    }
+
+    // Block shield hint
+    if (playerBlocking()) {
+      ctx.strokeStyle = "rgba(125, 211, 252, 0.5)";
+      ctx.lineWidth = 4 * s;
+      ctx.beginPath();
+      ctx.arc(cx, H - 170 * s, 135 * s, Math.PI * 1.15, Math.PI * 1.85);
+      ctx.stroke();
+    }
+  }
+
+  function drawHud(s) {
+    const barW = Math.min(W * 0.4, 300), barH = 16, m = 12;
+    const drawBar = (x, hp, max, color, align) => {
+      ctx.fillStyle = "rgba(255,255,255,0.12)";
+      ctx.beginPath();
+      ctx.roundRect(x, m + 16, barW, barH, 8);
+      ctx.fill();
+      const w = (barW * hp) / max;
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.roundRect(align === "right" ? x + barW - w : x, m + 16, w, barH, 8);
+      ctx.fill();
+    };
+    ctx.font = "700 12px -apple-system, sans-serif";
+    ctx.fillStyle = "#f1f5f9";
+    ctx.textBaseline = "alphabetic";
+    ctx.textAlign = "left";
+    ctx.fillText("YOU — RED BOT", m, m + 10);
+    drawBar(m, player.hp, MAX_HP, "#ef4444", "left");
+    ctx.textAlign = "right";
+    ctx.fillText(`CPU — ${cpu.skin.name}  LV.${cpu.level + 1}`, W - m, m + 10);
+    drawBar(W - m - barW, cpu.hp, cpu.maxHp, cpu.skin.bar, "right");
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#9aa3b8";
+    ctx.fillText(`STREAK ${record.streak} · BEST ${record.best}`, W / 2, m + 10);
+    ctx.textAlign = "left";
+  }
+
+  function drawBanners(s) {
+    ctx.textAlign = "center";
+    if (state === "fight" && fightT < 900) {
+      const a = fightT < 700 ? 1 : 1 - (fightT - 700) / 200;
+      const boss = cpu.skin.dragon;
+      ctx.fillStyle = boss ? `rgba(239, 68, 68, ${a})` : `rgba(251, 191, 36, ${a})`;
+      ctx.font = `900 italic ${Math.round((boss ? 52 : 64) * s)}px -apple-system, sans-serif`;
+      ctx.fillText(boss ? "RED DRAGON!!" : "FIGHT!", W / 2, H * 0.5);
+    }
+    if (state === "ko" && koT > 250) {
+      ctx.fillStyle = "#fbbf24";
+      ctx.strokeStyle = "#7c2d12";
+      ctx.lineWidth = 8 * s;
+      ctx.font = `900 italic ${Math.round(110 * s)}px -apple-system, sans-serif`;
+      ctx.strokeText("KO!", W / 2, H * 0.5);
+      ctx.fillText("KO!", W / 2, H * 0.5);
+    }
+    ctx.textAlign = "left";
+  }
+
+  function draw() {
+    const s = S();
+    ctx.clearRect(0, 0, W, H);
+    ctx.save();
+    if (shakeT > 0) {
+      const k = shakeT / 220;
+      ctx.translate(rand(-1, 1) * shakeMag * k, rand(-1, 1) * shakeMag * k);
+    }
+    drawRing(s);
+    if (cpu.skin.dragon) drawDragon(s, now); else drawCpu(s, now);
+    drawPlayer(s, now);
+    drawCpuIncomingGlove(s);
+    drawDragonTailSweep(s);
+    for (const p of particles) {
+      ctx.globalAlpha = 1 - p.t / p.life;
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 3.5 * S(), 0, TAU);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+
+    // Red vignette when we get socked
+    if (player.hurtT > 0) {
+      ctx.fillStyle = `rgba(239, 68, 68, ${0.32 * (player.hurtT / 350)})`;
+      ctx.fillRect(0, 0, W, H);
+    }
+    drawHud(s);
+    drawBanners(s);
+  }
+
+  // ---------- Main loop ----------
+  let lastFrame = 0;
+  function frame(t) {
+    requestAnimationFrame(frame);
+    if (!lastFrame) lastFrame = t;
+    const dt = Math.min(50, t - lastFrame);
+    lastFrame = t;
+    now += dt;
+
+    if (state === "fight") {
+      fightT += dt;
+      if (fightT >= 600) updateCpu(dt); // brief grace period after the bell
+      updatePlayer(dt);
+    } else if (state === "ko") {
+      koT += dt;
+      if (koT > 1900) showResult();
+    }
+    if (shakeT > 0) shakeT -= dt;
+    updateParticles(dt);
+    draw();
+  }
+
+  // ---------- Input: keyboard (macOS Safari) ----------
+  const BLOCK_KEYS = new Set(["s", "arrowdown", " "]);
+  const CHEAT = "tyuiop";
+  let cheatPos = 0;
+
+  window.addEventListener("keydown", (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const key = e.key.toLowerCase();
+    if (["a", "d", "s", "w", "p", " ", "arrowleft", "arrowright", "arrowdown", "arrowup"].includes(key)) {
+      e.preventDefault();
+    }
+    ensureAudio();
+    if (e.repeat) return;
+    // The secret code advances quietly regardless of what else the key does
+    cheatPos = key === CHEAT[cheatPos] ? cheatPos + 1 : (key === CHEAT[0] ? 1 : 0);
+    if (cheatPos === CHEAT.length) {
+      cheatPos = 0;
+      return showSkinSelect();
+    }
+    if (state === "select") {
+      if (key === "escape") startFight(); // never mind — random opponent
+      return;
+    }
+    if (state === "menu" || state === "result") return startFight();
+    if (state === "paused") return togglePause();
+    if (state !== "fight") return;
+    if (key === "p" || key === "escape") return togglePause();
+    if (key === "a" || key === "arrowleft") throwJab("L");
+    else if (key === "d" || key === "arrowright") throwJab("R");
+    else if (BLOCK_KEYS.has(key)) player.blockHeld = true;
+  });
+
+  window.addEventListener("keyup", (e) => {
+    if (BLOCK_KEYS.has(e.key.toLowerCase())) player.blockHeld = false;
+  });
+
+  window.addEventListener("blur", () => { player.blockHeld = false; });
+
+  // ---------- Input: touch buttons (iOS Safari) ----------
+  function bindButton(id, onDown, onUp) {
+    const el = document.getElementById(id);
+    el.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      ensureAudio();
+      el.classList.add("pressed");
+      onDown();
+    });
+    const release = (e) => {
+      el.classList.remove("pressed");
+      if (onUp) onUp();
+    };
+    el.addEventListener("pointerup", release);
+    el.addEventListener("pointercancel", release);
+    el.addEventListener("pointerleave", release);
+  }
+  bindButton("btn-left", () => {
+    if (state === "menu" || state === "result") return startFight();
+    if (state === "paused") return togglePause();
+    throwJab("L");
+  });
+  bindButton("btn-right", () => {
+    if (state === "menu" || state === "result") return startFight();
+    if (state === "paused") return togglePause();
+    throwJab("R");
+  });
+  bindButton("btn-block", () => {
+    if (state === "menu" || state === "result") return startFight();
+    if (state === "paused") return togglePause();
+    player.blockHeld = true;
+  }, () => { player.blockHeld = false; });
+
+  // Tap the overlay/canvas to start or resume
+  overlay.addEventListener("pointerdown", (e) => {
+    if (e.target.closest && e.target.closest("a")) return; // let the back link work
+    e.preventDefault();
+    ensureAudio();
+    if (state === "menu" || state === "result") startFight();
+    else if (state === "paused") togglePause();
+  });
+
+  // Keep iOS Safari from scrolling, bouncing, or zooming
+  document.addEventListener("touchmove", (e) => {
+    if (e.target.closest && e.target.closest("a")) return;
+    e.preventDefault();
+  }, { passive: false });
+  document.addEventListener("gesturestart", (e) => e.preventDefault());
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden && state === "fight") togglePause();
+    if (document.hidden) player.blockHeld = false;
+  });
+
+  // ---------- Boot ----------
+  window.addEventListener("resize", resize);
+  window.addEventListener("orientationchange", () => setTimeout(resize, 100));
+  resize();
+  showMenu();
+  requestAnimationFrame(frame);
+})();

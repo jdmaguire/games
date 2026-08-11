@@ -1,0 +1,10 @@
+# Vendored third-party artifacts. Nothing here is hand-edited — it is replaced wholesale
+# from upstream. Marking them keeps them out of `git diff` output, out of GitHub's
+# language stats, and collapsed by default in pull-request reviews.
+
+engines/stockfish-18-lite-single.wasm  binary linguist-vendored linguist-generated
+engines/stockfish-18-lite-single.js    linguist-vendored linguist-generated -diff
+engines/STOCKFISH-LICENSE.txt          linguist-vendored linguist-generated -diff
+lib/chess-1.4.0.mjs                    linguist-vendored linguist-generated -diff
+lib/CHESSJS-LICENSE.txt                linguist-vendored linguist-generated -diff
+LICENSE                                linguist-vendored linguist-generated -diff
