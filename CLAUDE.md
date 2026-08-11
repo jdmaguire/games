@@ -36,7 +36,22 @@ Shared, loaded by the pages that need them:
 | `js/shared/celebrate.js` | 74 | `window.GameCelebrate` = `{ showBanner, hideBanner, confetti }`. |
 
 Other: `readme.md` (player blurb), `docs/token-notes.md` (what this repo costs to work in
-and what is still worth splitting), `docs/claude-settings.json` (copy-in settings).
+and what is still worth splitting), `docs/claude-settings.json` (copy-in settings),
+`docs/memory/` (cached codebase facts — see below).
+
+## Cached codebase facts — `docs/memory/`
+
+`docs/memory/` holds facts that are expensive to re-derive from the code but too detailed
+for this file: exact `GameAudio`/`GameCelebrate` signatures, the JSON shape and load
+validation of every `localStorage` key, and the chess/checkers engine internals
+(Elo-weakening scheme, `LEVELS` table, board encoding). `docs/memory/MEMORY.md` is the
+index.
+
+**Check these files before grepping or reading source for anything they cover.** And keep
+them true: any change to code they describe — a shared-module signature, a storage key's
+shape, an engine tuning knob — must update the matching `docs/memory/` file in the same
+commit. A stale entry is worse than none; if you catch one that no longer matches the
+code, fix it even if your change didn't cause the drift.
 
 ### Vendored — do not read these
 

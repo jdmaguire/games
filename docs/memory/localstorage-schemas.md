@@ -1,0 +1,20 @@
+---
+name: localstorage-schemas
+description: "Exact JSON shape and load-time validation of every localStorage key (snake-best, sockbot-record, chess/checkers prefs+game, breakout-best)"
+metadata: 
+  node_type: memory
+  type: project
+  originSessionId: 71baaf5d-5c78-4c8d-b9bc-18590770c633
+  modified: 2026-08-11T00:45:58.313Z
+---
+
+Exact value shapes of all localStorage keys (as of 2026-08-10). CLAUDE.md lists the key names; this records the shapes and the validation each game applies on load. `js/index.js` reads all of them to render card stats, so reshaping any key means updating it too.
+
+- `snake-best` / `breakout-best` — stringified integer (`String(best)`), read with `parseInt(x, 10) || 0`.
+- `sockbot-record` (js/robot.js ~line 134) — `{ streak: number, best: number, dragonTries: number }`. Load requires numeric `streak` and `best`; `dragonTries` defaults to 0. index.js shows "Best streak" and a 🐉 hint when `dragonTries > 0`.
+- `chess-prefs` — `{ elo: number, side: "w"|"b" }`, default `{ elo: 200, side: "w" }`. Load accepts if `elo` is a number.
+- `chess-game` — `{ moves: string[] (UCI), side: "w"|"b", elo: number }`. The UCI move list fully reconstructs the position. Boot resumes only if `moves` is all-strings array and `side` is valid; missing `elo` falls back to prefs.
+- `checkers-prefs` — `{ level: number (0-9), side: 1|-1 }` (RED=1, BLK=-1), default `{ level: 0, side: RED }`. index.js displays `level + 1` as "Engine level N of 10".
+- `checkers-game` — `{ board: number[8][8], turn: 1|-1, clock: number, side: 1|-1, level: number, snapshots: [] }`. Board cells must each be in [-2,-1,0,1,2] (validated by `validBoard` at boot). Saved at stable points between moves.
+
+Both board games wrap every access in try/catch (`/* private browsing */`) and fall through to the setup menu on a corrupted save. Board-cell encoding is detailed in [[game-engine-internals]].
