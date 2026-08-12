@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://jdmaguire.github.io/games/sitemap.xml
+Sitemap: https://maguire.app/sitemap.xml

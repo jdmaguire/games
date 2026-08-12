@@ -1,43 +1,43 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://jdmaguire.github.io/games/</loc>
+    <loc>https://maguire.app/</loc>
     <lastmod>2026-08-12</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://jdmaguire.github.io/games/snake.html</loc>
+    <loc>https://maguire.app/snake.html</loc>
     <lastmod>2026-08-12</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://jdmaguire.github.io/games/robot.html</loc>
+    <loc>https://maguire.app/robot.html</loc>
     <lastmod>2026-08-12</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://jdmaguire.github.io/games/chess.html</loc>
+    <loc>https://maguire.app/chess.html</loc>
     <lastmod>2026-08-12</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://jdmaguire.github.io/games/checkers.html</loc>
+    <loc>https://maguire.app/checkers.html</loc>
     <lastmod>2026-08-12</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://jdmaguire.github.io/games/breakout.html</loc>
+    <loc>https://maguire.app/breakout.html</loc>
     <lastmod>2026-08-12</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://jdmaguire.github.io/games/minesweeper.html</loc>
+    <loc>https://maguire.app/minesweeper.html</loc>
     <lastmod>2026-08-12</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>

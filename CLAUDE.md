@@ -6,7 +6,7 @@ can find the right ~50 lines to change instead of loading whole files into conte
 ## What this is
 
 A static collection of browser games, hand-written (vibecoded) and served straight off
-GitHub Pages at <https://jdmaguire.github.io/games/>. Built for a kid on an iPad.
+GitHub Pages at <https://maguire.app/>. Built for a kid on an iPad.
 
 - **No build step, no bundler, no package.json, no dependencies to install.**
 - **No test suite and no linter.** There is nothing to run to prove a change works.
