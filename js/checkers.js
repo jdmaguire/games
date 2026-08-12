@@ -287,7 +287,9 @@
   let activeMoves = [];       // legal sequences (possibly mid-jump continuations)
   let midJump = false;
   let lastPath = [];          // squares to highlight from the previous move
-  let snapshots = [];         // undo points, taken at the start of each player turn
+  let snapshots = [];         // undo stack: a board copy per completed player move
+  let pendingSnap = null;     // board copy taken at the start of the player's turn;
+                              // pushed into snapshots when their move completes
 
   function newBoard() {
     const bd = Array.from({ length: 8 }, () => new Array(8).fill(0));
@@ -371,7 +373,7 @@
       div.classList.toggle("can", canSel.has(key) && v !== 0 && key !== selKey);
       div.classList.toggle("last", lastSet.has(key));
     }
-    btnUndo.disabled = thinking || animating || gameOver || turn !== playerSide || midJump || snapshots.length < 2;
+    btnUndo.disabled = thinking || animating || gameOver || turn !== playerSide || midJump || snapshots.length === 0;
     renderMaterial();
   }
 
@@ -416,12 +418,12 @@
 
   // ---------- Turn flow ----------
   function beginPlayerTurn() {
-    snapshots.push({ bd: board.map((row) => row.slice()), clock });
+    pendingSnap = { bd: board.map((row) => row.slice()), clock };
     resumePlayerTurn();
     if (!gameOver) saveGame();
   }
 
-  // Same as beginPlayerTurn but without recording a new undo point (used on restore)
+  // Same as beginPlayerTurn but without re-arming an undo point (used on restore)
   function resumePlayerTurn() {
     const { moves, forced } = genMoves(board, playerSide);
     if (moves.length === 0) return endGame(-playerSide);
@@ -562,6 +564,8 @@
   window.addEventListener("pointercancel", onDragCancel);
 
   function finishPlayerMove() {
+    if (pendingSnap) snapshots.push(pendingSnap); // this move is now undoable
+    pendingSnap = null;
     selected = null;
     midJump = false;
     activeMoves = [];
@@ -649,6 +653,7 @@
     activeMoves = [];
     lastPath = [];
     snapshots = [];
+    pendingSnap = null;
     overlay.classList.add("hidden");
     evalEl.hidden = !showEval;
     resetEval();
@@ -659,14 +664,15 @@
   }
 
   function undoTurn() {
-    // Undo a whole exchange (your last move + the engine's reply), like chess.
-    // One snapshot is pushed at the start of each player turn, so popping two
-    // puts you back on your previous turn with both sides' last moves reverted.
-    if (thinking || animating || gameOver || turn !== playerSide || midJump || snapshots.length < 2) return;
-    snapshots.pop(); // your last move
-    const snap = snapshots.pop(); // the engine's last move
-    board = snap.bd.map((row) => row.slice());
-    clock = snap.clock;
+    // Undo the whole last exchange (your move + the engine's reply) in one click,
+    // like chess: each snapshot in the stack is one completed player move, so a
+    // pop always lands back on your turn with the opposing move reverted too.
+    if (thinking || animating || gameOver || turn !== playerSide || midJump || snapshots.length === 0) return;
+    const snap = snapshots.pop();
+    const bd = Array.isArray(snap.bd) ? snap.bd : snap; // tolerate any pre-fix bare-array saves
+    board = bd.map((row) => row.slice());
+    clock = typeof snap.clock === "number" ? snap.clock : 0;
+    pendingSnap = { bd: board.map((row) => row.slice()), clock }; // the restored turn's pre-move state
     lastPath = [];
     const { moves } = genMoves(board, playerSide);
     activeMoves = moves;
@@ -748,6 +754,7 @@
       syncSideUI(); // keep a Random pick as-is; the concrete side is just the resumed game's
       thinking = false; gameOver = false; midJump = false;
       selected = null; activeMoves = []; lastPath = [];
+      pendingSnap = { bd: board.map((row) => row.slice()), clock }; // the resumed turn's pre-move state
       overlay.classList.add("hidden");
       evalEl.hidden = !showEval;
       resetEval();
