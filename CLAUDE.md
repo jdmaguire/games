@@ -27,6 +27,7 @@ you are changing. Markup, styling, and logic are three separate reads now.
 | Chess | `chess.html` (~49) | `css/chess.css` (184) | `js/chess.js` (612) |
 | Checkers | `checkers.html` (~48) | `css/checkers.css` (180) | `js/checkers.js` (675) |
 | Breakout | `breakout.html` (~33) | `css/breakout.css` (77) | `js/breakout.js` (462) |
+| Minesweeper | `minesweeper.html` (~41) | `css/minesweeper.css` (109) | `js/minesweeper.js` (563) |
 
 Shared, loaded by the pages that need them:
 
@@ -107,6 +108,10 @@ somewhere around 18k tokens; a single section costs a few hundred. See
   Render · Main loop · Input: keyboard · Input: touch · Input: mouse · Boot.
   Gameplay runs in a fixed 100 × 140 logical playfield; `scale` is the only
   pixels-per-unit number, so tuning constants never mention pixels.
+- **`js/minesweeper.js`** — Tuning · Audio · State · Sizing · Game setup · Match flow ·
+  Render · Main loop · Input: keyboard · Input: touch · Input: mouse · Controls ·
+  Boot. Mines are placed on the first reveal, with the first square and its
+  neighbours guaranteed clear. Best-time per difficulty in `minesweeper-best`.
 
 ## Conventions
 
@@ -128,7 +133,7 @@ somewhere around 18k tokens; a single section costs a few hundred. See
   keeps its own `sfx` object of named voices on top of the shared primitives.
 - **`localStorage` is always wrapped in `try/catch`** (`/* private browsing */`). Keys in
   use: `snake-best`, `sockbot-record`, `chess-prefs`, `chess-game`, `checkers-prefs`,
-  `checkers-game`, `breakout-best`. `js/index.js` reads all of them to render card stats — if you rename or
+  `checkers-game`, `breakout-best`, `minesweeper-best`. `js/index.js` reads all of them to render card stats — if you rename or
   reshape a key, update it too.
 - **Canvas games** scale by `devicePixelRatio` and derive sizes from a single scale unit
   (e.g. `js/robot.js`'s `S()`), so nothing is hard-coded in pixels.

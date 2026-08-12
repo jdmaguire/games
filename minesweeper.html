@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7035083353596708"
+     crossorigin="anonymous"></script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Minesweeper</title>
+<link rel="stylesheet" href="css/minesweeper.css">
+</head>
+<body>
+  <div id="hud">
+    <div><div class="label">Mines</div><div class="value" id="mines">10</div></div>
+    <div id="mid">
+      <a id="back" href="index.html">← Games</a>
+      <button type="button" id="face" aria-label="New game">🙂</button>
+    </div>
+    <div style="text-align:right"><div class="label">Time</div><div class="value" id="time">0</div></div>
+  </div>
+  <div id="controls">
+    <button type="button" class="diff" data-diff="easy">Easy</button>
+    <button type="button" class="diff" data-diff="medium">Medium</button>
+    <button type="button" class="diff" data-diff="hard">Hard</button>
+    <button type="button" id="flag-mode" hidden>🚩 Flag</button>
+  </div>
+  <div id="board-wrap">
+    <canvas id="board"></canvas>
+    <div id="overlay">
+      <h1 id="overlay-title">Minesweeper</h1>
+      <p class="big-score" id="overlay-score" hidden></p>
+      <p id="overlay-hint"></p>
+    </div>
+  </div>
+
+<script src="js/shared/audio.js"></script>
+<script src="js/shared/celebrate.js"></script>
+<script src="js/minesweeper.js"></script>
+</body>
+</html>

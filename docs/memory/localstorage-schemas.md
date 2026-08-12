@@ -1,6 +1,6 @@
 ---
 name: localstorage-schemas
-description: "Exact JSON shape and load-time validation of every localStorage key (snake-best, sockbot-record, chess/checkers prefs+game, breakout-best)"
+description: "Exact JSON shape and load-time validation of every localStorage key (snake-best, sockbot-record, chess/checkers prefs+game, breakout-best, minesweeper-best)"
 metadata: 
   node_type: memory
   type: project
@@ -11,6 +11,7 @@ metadata:
 Exact value shapes of all localStorage keys (as of 2026-08-10). CLAUDE.md lists the key names; this records the shapes and the validation each game applies on load. `js/index.js` reads all of them to render card stats, so reshaping any key means updating it too.
 
 - `snake-best` / `breakout-best` — stringified integer (`String(best)`), read with `parseInt(x, 10) || 0`.
+- `minesweeper-best` (js/minesweeper.js ~line 73) — `{ easy: number, medium: number, hard: number }` seconds. Load keeps each field only if a positive number. Saved on a win when the time beats the stored best for that difficulty. index.js shows the best (min) time across all three.
 - `sockbot-record` (js/robot.js ~line 134) — `{ streak: number, best: number, dragonTries: number }`. Load requires numeric `streak` and `best`; `dragonTries` defaults to 0. index.js shows "Best streak" and a 🐉 hint when `dragonTries > 0`.
 - `chess-prefs` — `{ elo: number, side: "w"|"b", random: boolean }`, default `{ elo: 200, side: "w", random: false }`. `random: true` means the colour is picked randomly at game start; `side` then just holds the last concrete pick (and the resumed game's side). Load accepts if `elo` is a number; `side` is forced to `"w"` if invalid and `random` coerced to boolean (older saves without it load as `false`).
 - `chess-game` — `{ moves: string[] (UCI), side: "w"|"b", elo: number }`. The UCI move list fully reconstructs the position. Boot resumes only if `moves` is all-strings array and `side` is valid; missing `elo` falls back to prefs.

@@ -28,9 +28,17 @@
     const best = parseInt(localStorage.getItem("breakout-best"), 10);
     if (best > 0) document.getElementById("breakout-stat").textContent = "Best score: " + best;
   } catch (e) { /* private browsing */ }
+  try {
+    const b = JSON.parse(localStorage.getItem("minesweeper-best"));
+    let best = Infinity;
+    if (b) for (const k of ["easy", "medium", "hard"]) {
+      if (typeof b[k] === "number" && b[k] > 0) best = Math.min(best, b[k]);
+    }
+    if (best < Infinity) document.getElementById("minesweeper-stat").textContent = "Best time: " + best + "s";
+  } catch (e) { /* private browsing */ }
 
   // Quick keyboard select on desktop
-  const KEYS = { 1: "snake.html", 2: "robot.html", 3: "chess.html", 4: "checkers.html", 5: "breakout.html" };
+  const KEYS = { 1: "snake.html", 2: "robot.html", 3: "chess.html", 4: "checkers.html", 5: "breakout.html", 6: "minesweeper.html" };
   window.addEventListener("keydown", (e) => {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     if (KEYS[e.key]) window.location.href = KEYS[e.key];
