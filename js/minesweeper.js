@@ -323,6 +323,29 @@
     ctx.fillText(emoji, x * cell + cell / 2, y * cell + cell * 0.55);
   }
 
+  // A bright hand-drawn pennant — the 🚩 emoji renders too dim on some systems.
+  function drawFlag(x, y) {
+    const cx = x * cell, cy = y * cell;
+    const poleW = Math.max(2, cell * 0.07);
+    const poleX = cx + cell * 0.26;
+    const top = cy + cell * 0.18;
+    const bottom = cy + cell * 0.82;
+    // knob + pole
+    ctx.fillStyle = "#e2e8f0";
+    ctx.beginPath();
+    ctx.roundRect(poleX, cy + cell * 0.12, poleW * 1.8, cell * 0.1, poleW * 0.5);
+    ctx.fill();
+    ctx.fillRect(poleX, top, poleW, bottom - top);
+    // bright red pennant
+    ctx.fillStyle = "#ef4444";
+    ctx.beginPath();
+    ctx.moveTo(poleX + poleW, top + cell * 0.04);
+    ctx.lineTo(poleX + poleW + cell * 0.66, cy + cell * 0.42);
+    ctx.lineTo(poleX + poleW, cy + cell * 0.64);
+    ctx.closePath();
+    ctx.fill();
+  }
+
   function draw() {
     const w = COLS * cell, h = ROWS * cell;
     ctx.clearRect(0, 0, w, h);
@@ -361,7 +384,7 @@
           ctx.roundRect(px + 1, py + 1, s - 2, s * 0.45, radius * 0.6);
           ctx.fill();
           if (c.flag) {
-            drawEmoji("🚩", x, y);
+            drawFlag(x, y);
             // Wrong flag, revealed only once the game is over
             if (over && !c.mine) {
               ctx.strokeStyle = "#f87171";
