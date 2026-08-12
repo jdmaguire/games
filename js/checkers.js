@@ -623,6 +623,7 @@
     prefs.level = parseInt(lvlSlider.value, 10);
     refreshLvlLabel();
     renderNames(prefs.side);
+    savePrefs();
   });
   function syncSideUI() {
     sideR.classList.toggle("on", !prefs.random && prefs.side === RED);
@@ -672,6 +673,7 @@
         prefs.level = sv.level;
         lvlSlider.value = prefs.level;
         refreshLvlLabel();
+        savePrefs(); // commit the resumed game's difficulty as the remembered one
       }
       prefs.side = playerSide;
       syncSideUI(); // keep a Random pick as-is; the concrete side is just the resumed game's

@@ -531,6 +531,7 @@
     prefs.elo = saved.elo;
     eloSlider.value = prefs.elo;
     refreshEloLabel();
+    savePrefs(); // commit the resumed game's difficulty as the remembered one
     const last = uciMoves[uciMoves.length - 1];
     lastMove = last ? { from: last.slice(0, 2), to: last.slice(2, 4) } : null;
     selected = null;
@@ -581,6 +582,7 @@
     prefs.elo = parseInt(eloSlider.value, 10);
     refreshEloLabel();
     renderNames(prefs.side);
+    savePrefs();
   });
   function syncSideUI() {
     sideW.classList.toggle("on", !prefs.random && prefs.side === "w");
