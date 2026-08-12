@@ -149,3 +149,12 @@ There is nothing to run — no tests, no build, no lint. So:
 
 This is a toy repo for a child. Favour small, readable, dependency-free changes. Don't
 introduce a build step, a framework, or a package manager without being asked.
+
+## Adsense
+
+This has adsense. Because why not?
+
+Put this in the head section of any pages:
+
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7035083353596708"
+     crossorigin="anonymous"></script>
