@@ -36,7 +36,7 @@ Shared, loaded by the pages that need them:
 | `js/shared/audio.js` | 58 | WebAudio synth: `window.GameAudio` = `{ ensureAudio, beep, thud }`. |
 | `js/shared/celebrate.js` | 74 | `window.GameCelebrate` = `{ showBanner, hideBanner, confetti }`. |
 
-Other: `readme.md` (player blurb), `docs/token-notes.md` (what this repo costs to work in
+Other: `readme.md` (player blurb), `robots.txt` + `sitemap.xml` (SEO, at repo root), `docs/token-notes.md` (what this repo costs to work in
 and what is still worth splitting), `docs/claude-settings.json` (copy-in settings),
 `docs/memory/` (cached codebase facts — see below).
 
