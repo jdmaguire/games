@@ -33,6 +33,7 @@
   const lvlLabel = document.getElementById("lvl-label");
   const sideR = document.getElementById("side-r");
   const sideB = document.getElementById("side-b");
+  const sideRand = document.getElementById("side-rand");
   const btnNew = document.getElementById("btn-new");
   const btnUndo = document.getElementById("btn-undo");
   const topName = document.getElementById("top-name");
@@ -41,10 +42,13 @@
   const botMat = document.getElementById("bot-mat");
 
   // ---------- Preferences ----------
-  let prefs = { level: 0, side: RED }; // default to the gentlest setting
+  let prefs = { level: 0, side: RED, random: false }; // default to the gentlest setting
   try {
     const saved = JSON.parse(localStorage.getItem("checkers-prefs"));
-    if (saved && typeof saved.level === "number" && (saved.side === RED || saved.side === BLK)) prefs = saved;
+    if (saved && typeof saved.level === "number" && (saved.side === RED || saved.side === BLK)) {
+      prefs = saved;
+      prefs.random = !!prefs.random;
+    }
   } catch (e) { /* private browsing */ }
   function savePrefs() {
     try { localStorage.setItem("checkers-prefs", JSON.stringify(prefs)); } catch (e) { /* private browsing */ }
@@ -349,8 +353,11 @@
   // is running, otherwise whatever is picked in the menu.
   function renderNames(side) {
     const cls = side === RED ? "red" : "blk";
+    const youSub = !overlay.classList.contains("hidden") && prefs.random
+      ? "Random"
+      : (side === RED ? "Red" : "Black");
     botName.innerHTML = `<span class="disc ${cls}"></span>You` +
-      `<span class="sub">${side === RED ? "Red" : "Black"}</span>`;
+      `<span class="sub">${youSub}</span>`;
     topName.innerHTML = `<span class="disc ${cls === "red" ? "blk" : "red"}"></span>Computer` +
       `<span class="sub">Level ${prefs.level + 1}</span>`;
   }
@@ -568,6 +575,7 @@
     endTimer = setTimeout(() => {
       hideBanner();
       overlay.classList.remove("hidden");
+      syncSideUI();
     }, won ? 5000 : 1600);
   }
 
@@ -575,8 +583,8 @@
     clearTimeout(endTimer);
     hideBanner();
     board = newBoard();
-    playerSide = prefs.side;
-    aiSide = -prefs.side;
+    playerSide = prefs.random ? (Math.random() < 0.5 ? RED : BLK) : prefs.side;
+    aiSide = -playerSide;
     turn = RED; // red always moves first
     clock = 0;
     thinking = false;
@@ -616,15 +624,25 @@
     refreshLvlLabel();
     renderNames(prefs.side);
   });
+  function syncSideUI() {
+    sideR.classList.toggle("on", !prefs.random && prefs.side === RED);
+    sideB.classList.toggle("on", !prefs.random && prefs.side === BLK);
+    sideRand.classList.toggle("on", prefs.random);
+    renderNames(prefs.side);
+  }
   function setSide(side) {
-    prefs.side = side;
-    sideR.classList.toggle("on", side === RED);
-    sideB.classList.toggle("on", side === BLK);
-    renderNames(side);
+    if (side === RED || side === BLK) {
+      prefs.side = side;
+      prefs.random = false;
+    } else {
+      prefs.random = true;
+    }
+    syncSideUI();
   }
   sideR.addEventListener("click", () => setSide(RED));
   sideB.addEventListener("click", () => setSide(BLK));
-  setSide(prefs.side);
+  sideRand.addEventListener("click", () => setSide("rand"));
+  setSide(prefs.random ? "rand" : prefs.side);
 
   document.getElementById("start").addEventListener("click", () => {
     ensureAudio();
@@ -655,7 +673,8 @@
         lvlSlider.value = prefs.level;
         refreshLvlLabel();
       }
-      setSide(playerSide);
+      prefs.side = playerSide;
+      syncSideUI(); // keep a Random pick as-is; the concrete side is just the resumed game's
       thinking = false; gameOver = false; midJump = false;
       selected = null; activeMoves = []; lastPath = [];
       overlay.classList.add("hidden");

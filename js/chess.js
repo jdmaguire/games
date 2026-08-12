@@ -10,6 +10,7 @@
   const eloLabel = document.getElementById("elo-label");
   const sideW = document.getElementById("side-w");
   const sideB = document.getElementById("side-b");
+  const sideR = document.getElementById("side-rand");
   const btnNew = document.getElementById("btn-new");
   const btnUndo = document.getElementById("btn-undo");
   const topName = document.getElementById("top-name");
@@ -22,10 +23,14 @@
   const FILES = "abcdefgh";
 
   // ---------- Preferences ----------
-  let prefs = { elo: 200, side: "w" }; // default to the gentlest setting
+  let prefs = { elo: 200, side: "w", random: false }; // default to the gentlest setting
   try {
     const saved = JSON.parse(localStorage.getItem("chess-prefs"));
-    if (saved && typeof saved.elo === "number") prefs = saved;
+    if (saved && typeof saved.elo === "number") {
+      prefs = saved;
+      if (prefs.side !== "w" && prefs.side !== "b") prefs.side = "w";
+      prefs.random = !!prefs.random;
+    }
   } catch (e) { /* private browsing */ }
   function savePrefs() {
     try { localStorage.setItem("chess-prefs", JSON.stringify(prefs)); } catch (e) { /* private browsing */ }
@@ -224,8 +229,11 @@
   // is running, otherwise whatever is picked in the menu.
   function renderNames(side) {
     const opp = side === "w" ? "b" : "w";
+    const youSub = !overlay.classList.contains("hidden") && prefs.random
+      ? "Random"
+      : (side === "w" ? "White" : "Black");
     botName.innerHTML = `<span class="chip ${side}">${GLYPH.k}︎</span>You` +
-      `<span class="sub">${side === "w" ? "White" : "Black"}</span>`;
+      `<span class="sub">${youSub}</span>`;
     topName.innerHTML = `<span class="chip ${opp}">${GLYPH.k}︎</span>Stockfish` +
       `<span class="sub">${prefs.elo} Elo</span>`;
   }
@@ -476,6 +484,7 @@
     endTimer = setTimeout(() => {
       hideBanner();
       overlay.classList.remove("hidden");
+      syncSideUI();
     }, won ? 5000 : 1600);
     return true;
   }
@@ -484,7 +493,7 @@
     if (!engineOk) return;
     clearTimeout(endTimer);
     hideBanner();
-    playerSide = prefs.side;
+    playerSide = prefs.random ? (Math.random() < 0.5 ? "w" : "b") : prefs.side;
     game = new Chess();
     uciMoves = [];
     selected = null;
@@ -517,7 +526,8 @@
     game = g;
     uciMoves = saved.moves.slice();
     playerSide = saved.side;
-    setSide(saved.side);
+    prefs.side = saved.side;
+    syncSideUI(); // keep a Random pick as-is; the concrete side is just the resumed game's
     prefs.elo = saved.elo;
     eloSlider.value = prefs.elo;
     refreshEloLabel();
@@ -572,15 +582,25 @@
     refreshEloLabel();
     renderNames(prefs.side);
   });
+  function syncSideUI() {
+    sideW.classList.toggle("on", !prefs.random && prefs.side === "w");
+    sideB.classList.toggle("on", !prefs.random && prefs.side === "b");
+    sideR.classList.toggle("on", prefs.random);
+    renderNames(prefs.side);
+  }
   function setSide(side) {
-    prefs.side = side;
-    sideW.classList.toggle("on", side === "w");
-    sideB.classList.toggle("on", side === "b");
-    renderNames(side);
+    if (side === "w" || side === "b") {
+      prefs.side = side;
+      prefs.random = false;
+    } else {
+      prefs.random = true;
+    }
+    syncSideUI();
   }
   sideW.addEventListener("click", () => setSide("w"));
   sideB.addEventListener("click", () => setSide("b"));
-  setSide(prefs.side);
+  sideR.addEventListener("click", () => setSide("rand"));
+  setSide(prefs.random ? "rand" : prefs.side);
 
   document.getElementById("start").addEventListener("click", () => {
     ensureAudio();

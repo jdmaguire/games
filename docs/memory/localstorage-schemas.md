@@ -12,9 +12,9 @@ Exact value shapes of all localStorage keys (as of 2026-08-10). CLAUDE.md lists 
 
 - `snake-best` / `breakout-best` — stringified integer (`String(best)`), read with `parseInt(x, 10) || 0`.
 - `sockbot-record` (js/robot.js ~line 134) — `{ streak: number, best: number, dragonTries: number }`. Load requires numeric `streak` and `best`; `dragonTries` defaults to 0. index.js shows "Best streak" and a 🐉 hint when `dragonTries > 0`.
-- `chess-prefs` — `{ elo: number, side: "w"|"b" }`, default `{ elo: 200, side: "w" }`. Load accepts if `elo` is a number.
+- `chess-prefs` — `{ elo: number, side: "w"|"b", random: boolean }`, default `{ elo: 200, side: "w", random: false }`. `random: true` means the colour is picked randomly at game start; `side` then just holds the last concrete pick (and the resumed game's side). Load accepts if `elo` is a number; `side` is forced to `"w"` if invalid and `random` coerced to boolean (older saves without it load as `false`).
 - `chess-game` — `{ moves: string[] (UCI), side: "w"|"b", elo: number }`. The UCI move list fully reconstructs the position. Boot resumes only if `moves` is all-strings array and `side` is valid; missing `elo` falls back to prefs.
-- `checkers-prefs` — `{ level: number (0-9), side: 1|-1 }` (RED=1, BLK=-1), default `{ level: 0, side: RED }`. index.js displays `level + 1` as "Engine level N of 10".
+- `checkers-prefs` — `{ level: number (0-9), side: 1|-1, random: boolean }` (RED=1, BLK=-1), default `{ level: 0, side: RED, random: false }`. `random: true` picks the colour randomly at game start. index.js displays `level + 1` as "Engine level N of 10".
 - `checkers-game` — `{ board: number[8][8], turn: 1|-1, clock: number, side: 1|-1, level: number, snapshots: [] }`. Board cells must each be in [-2,-1,0,1,2] (validated by `validBoard` at boot). Saved at stable points between moves.
 
 Both board games wrap every access in try/catch (`/* private browsing */`) and fall through to the setup menu on a corrupted save. Board-cell encoding is detailed in [[game-engine-internals]].
