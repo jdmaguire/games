@@ -40,6 +40,14 @@
   const botName = document.getElementById("bot-name");
   const topMat = document.getElementById("top-mat");
   const botMat = document.getElementById("bot-mat");
+  const evalEl = document.getElementById("eval");
+  const evalFill = document.getElementById("eval-fill");
+  const evalScoreEl = document.getElementById("eval-score");
+
+  // "Show engine evaluation" toggle from the game-select screen
+  let showEval = false;
+  try { showEval = localStorage.getItem("engine-eval") === "1"; } catch (e) { /* private browsing */ }
+  evalEl.hidden = true; // the menu overlay is up at boot; shown when a game starts
 
   // ---------- Preferences ----------
   let prefs = { level: 0, side: RED, random: false }; // default to the gentlest setting
@@ -197,10 +205,12 @@
     deadline = performance.now() + ms;
     const { moves } = genMoves(bd, side);
     if (moves.length === 0) return null;
-    if (moves.length === 1) return moves[0];
+    if (moves.length === 1) { moves[0].score = side * evaluate(bd); return moves[0]; }
     // Lowest levels mostly just play something legal, like a young kid would
     if (Math.random() < (LEVELS[level].random || 0)) {
-      return moves[Math.floor(Math.random() * moves.length)];
+      const m = moves[Math.floor(Math.random() * moves.length)];
+      m.score = side * evaluate(bd);
+      return m;
     }
     let scored = moves.map((m) => ({ m, score: 0 }));
     for (let d = 2; d <= maxDepth; d++) {
@@ -224,7 +234,49 @@
     scored.sort((x, y) => y.score - x.score);
     const margin = noise * 3;
     const candidates = scored.filter((e) => e.score >= scored[0].score - margin);
-    return candidates[Math.floor(Math.random() * candidates.length)].m;
+    const mv = candidates[Math.floor(Math.random() * candidates.length)].m;
+    mv.score = scored[0].score;
+    return mv;
+  }
+
+  // ---------- Live evaluation ----------
+  // The eval bar shows a quick negamax score of the current position, run
+  // synchronously on the player's turn (the search only reads the board). It
+  // shares the engine's exact code path, so the number matches what the AI plays.
+  const EVAL_LEVEL = 8; // depth 13, 1s budget — strong enough to read the position
+  let evalScore = null; // player-relative, positive = good for the player
+  let evalTimer = null;
+
+  function resetEval() {
+    evalScore = null;
+    if (showEval) { evalFill.style.width = "50%"; evalScoreEl.textContent = "…"; }
+  }
+
+  function paintEval() {
+    if (!showEval) return;
+    if (evalScore === null) return resetEval();
+    const mine = playerSide === RED ? evalScore : -evalScore;
+    // 1 man ≈ 100 here, so the raw number is already "centipawns"; map it like lichess
+    const share = 100 / (1 + Math.exp(-0.00368208 * mine));
+    evalFill.style.width = share.toFixed(1) + "%";
+    evalFill.style.background = playerSide === RED ? "#f87171" : "#e8edf5";
+    evalScoreEl.textContent = (mine >= 0 ? "+" : "") + (mine / 100).toFixed(1);
+  }
+
+  function quickEval() {
+    if (!showEval || gameOver || turn !== playerSide) return;
+    const mv = aiPickMove(board, playerSide, EVAL_LEVEL);
+    if (mv && typeof mv.score === "number") {
+      evalScore = mv.score; // already player-relative (side to move == player)
+      paintEval();
+    }
+  }
+
+  // Kick the analysis off just after the "Your move" frame has painted
+  function scheduleEval() {
+    if (!showEval || gameOver) return;
+    clearTimeout(evalTimer);
+    evalTimer = setTimeout(quickEval, 250);
   }
 
   // ---------- Game state ----------
@@ -319,7 +371,7 @@
       div.classList.toggle("can", canSel.has(key) && v !== 0 && key !== selKey);
       div.classList.toggle("last", lastSet.has(key));
     }
-    btnUndo.disabled = thinking || animating || gameOver || turn !== playerSide || midJump || snapshots.length === 0;
+    btnUndo.disabled = thinking || animating || gameOver || turn !== playerSide || midJump || snapshots.length < 2;
     renderMaterial();
   }
 
@@ -379,6 +431,7 @@
     midJump = false;
     setStatus(forced ? "Your move — capture!" : "Your move");
     render();
+    scheduleEval();
   }
 
   // Continue or complete a move to (r, c); returns true if one was played.
@@ -563,6 +616,8 @@
 
   function endGame(winner) {
     gameOver = true;
+    clearTimeout(evalTimer);
+    evalEl.hidden = true;
     clearGameSave();
     const won = winner === playerSide;
     const msg = winner === 0 ? "Draw — no progress." : won ? "You win! 🏆" : "You lose. 💀";
@@ -595,6 +650,8 @@
     lastPath = [];
     snapshots = [];
     overlay.classList.add("hidden");
+    evalEl.hidden = !showEval;
+    resetEval();
     buildBoard();
     saveGame();
     if (turn === playerSide) beginPlayerTurn();
@@ -602,8 +659,12 @@
   }
 
   function undoTurn() {
-    if (thinking || animating || gameOver || turn !== playerSide || midJump || snapshots.length === 0) return;
-    const snap = snapshots.pop();
+    // Undo a whole exchange (your last move + the engine's reply), like chess.
+    // One snapshot is pushed at the start of each player turn, so popping two
+    // puts you back on your previous turn with both sides' last moves reverted.
+    if (thinking || animating || gameOver || turn !== playerSide || midJump || snapshots.length < 2) return;
+    snapshots.pop(); // your last move
+    const snap = snapshots.pop(); // the engine's last move
     board = snap.bd.map((row) => row.slice());
     clock = snap.clock;
     lastPath = [];
@@ -613,6 +674,7 @@
     saveGame();
     setStatus("Your move");
     render();
+    scheduleEval();
   }
 
   // ---------- Setup UI ----------
@@ -644,6 +706,13 @@
   sideB.addEventListener("click", () => setSide(BLK));
   sideRand.addEventListener("click", () => setSide("rand"));
   setSide(prefs.random ? "rand" : prefs.side);
+
+  const evalOpt = document.getElementById("eval-opt");
+  evalOpt.checked = showEval;
+  evalOpt.addEventListener("change", () => {
+    showEval = evalOpt.checked;
+    try { localStorage.setItem("engine-eval", showEval ? "1" : "0"); } catch (e) { /* private browsing */ }
+  });
 
   document.getElementById("start").addEventListener("click", () => {
     ensureAudio();
@@ -680,6 +749,8 @@
       thinking = false; gameOver = false; midJump = false;
       selected = null; activeMoves = []; lastPath = [];
       overlay.classList.add("hidden");
+      evalEl.hidden = !showEval;
+      resetEval();
       buildBoard();
       resumed = true;
       if (turn === playerSide) resumePlayerTurn();

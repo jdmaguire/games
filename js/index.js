@@ -37,6 +37,13 @@
     if (best < Infinity) document.getElementById("minesweeper-stat").textContent = "Best time: " + best + "s";
   } catch (e) { /* private browsing */ }
 
+  // "Show engine evaluation in Chess & Checkers" toggle
+  const evalToggle = document.getElementById("eval-toggle");
+  try { evalToggle.checked = localStorage.getItem("engine-eval") === "1"; } catch (e) { /* private browsing */ }
+  evalToggle.addEventListener("change", () => {
+    try { localStorage.setItem("engine-eval", evalToggle.checked ? "1" : "0"); } catch (e) { /* private browsing */ }
+  });
+
   // Quick keyboard select on desktop
   const KEYS = { 1: "snake.html", 2: "robot.html", 3: "chess.html", 4: "checkers.html", 5: "breakout.html", 6: "minesweeper.html" };
   window.addEventListener("keydown", (e) => {

@@ -17,10 +17,18 @@
   const botName = document.getElementById("bot-name");
   const topMat = document.getElementById("top-mat");
   const botMat = document.getElementById("bot-mat");
+  const evalEl = document.getElementById("eval");
+  const evalFill = document.getElementById("eval-fill");
+  const evalScoreEl = document.getElementById("eval-score");
 
   const GLYPH = { k: "♚", q: "♛", r: "♜", b: "♝", n: "♞", p: "♟" };
   const VALUE = { q: 9, r: 5, b: 3, n: 3, p: 1 };
   const FILES = "abcdefgh";
+
+  // "Show engine evaluation" toggle from the game-select screen
+  let showEval = false;
+  try { showEval = localStorage.getItem("engine-eval") === "1"; } catch (e) { /* private browsing */ }
+  evalEl.hidden = true; // the menu overlay is up at boot; shown when a game starts
 
   // ---------- Preferences ----------
   let prefs = { elo: 200, side: "w", random: false }; // default to the gentlest setting
@@ -85,6 +93,7 @@
     }
     engine.onmessage = (e) => {
       const line = String(e.data);
+      if (showEval && line.includes(" score ")) parseScore(line);
       for (let i = 0; i < waiters.length; i++) {
         if (waiters[i].pred(line)) { waiters.splice(i, 1)[0].res(line); return; }
       }
@@ -99,6 +108,85 @@
     expect((l) => l === "uciok").then(() => { engineOk = true; });
   }
   initEngine();
+
+  // ---------- Live evaluation ----------
+  // The eval bar shows what Stockfish thinks of the current position, updated as
+  // its search streams `info … score` lines. On the player's turn we keep the
+  // engine analysing in the background (go infinite) and stop it before any move.
+  let evalWhite = null; // white-relative centipawns (or ±1e6 when mate is known)
+  let evalMate = null;  // white's mate-in count, signed (null = no mate found)
+  let searchTurn = "w"; // side to move in the position currently being searched
+  let analysisOn = false;
+
+  function parseScore(line) {
+    const cp = line.match(/score cp (-?\d+)/);
+    const mate = line.match(/score mate (-?\d+)/);
+    if (cp) {
+      evalMate = null;
+      evalWhite = searchTurn === "w" ? +cp[1] : -(+cp[1]);
+    } else if (mate) {
+      evalMate = searchTurn === "w" ? +mate[1] : -(+mate[1]);
+      evalWhite = evalMate > 0 ? 1e6 : -1e6;
+    } else {
+      return;
+    }
+    paintEval();
+  }
+
+  function resetEval() {
+    evalWhite = null;
+    evalMate = null;
+    if (showEval) { evalFill.style.width = "50%"; evalScoreEl.textContent = "…"; }
+  }
+
+  function paintEval() {
+    if (!showEval) return;
+    if (evalWhite === null) return resetEval();
+    const mine = playerSide === "w" ? evalWhite : -evalWhite;    // player's advantage
+    const mineMate = playerSide === "w" ? evalMate : -evalMate;  // signed, player to deliver
+    // lichess's bar mapping: 1 pawn ≈ 59%, then it flattens as the edge grows
+    const share = 100 / (1 + Math.exp(-0.00368208 * mine));
+    evalFill.style.width = share.toFixed(1) + "%";
+    evalFill.style.background = playerSide === "w" ? "#f1f5f9" : "#94a3b8";
+    evalScoreEl.textContent = mineMate !== null
+      ? (mineMate > 0 ? "M" : "m") + Math.abs(mineMate)
+      : (mine >= 0 ? "+" : "") + (mine / 100).toFixed(1);
+  }
+
+  function startAnalysis() {
+    if (!showEval || !engineOk || gameOver || thinking || animating) return;
+    if (game.turn() !== playerSide || analysisOn) return;
+    analysisOn = true;
+    searchTurn = game.turn();
+    engine.postMessage("position startpos" + (uciMoves.length ? " moves " + uciMoves.join(" ") : ""));
+    engine.postMessage("go infinite");
+  }
+
+  // Send stop and drain the analysis's bestmove so the engine's own searches are
+  // never confused with an analysis result. Safe to call when no analysis runs.
+  // The 1.5s timeout guards against an infinite search that ends without ever
+  // answering "stop" (seen around mating lines): a hung drain must never freeze
+  // the engine's next move, and removing the waiter keeps a late reply from being
+  // mistaken for the "go movetime" bestmove.
+  function stopAnalysis() {
+    if (!analysisOn) return Promise.resolve();
+    analysisOn = false;
+    engine.postMessage("stop");
+    return drainBestmove();
+  }
+
+  function drainBestmove() {
+    return new Promise((res) => {
+      const entry = { pred: (l) => l.startsWith("bestmove"), res };
+      waiters.push(entry);
+      setTimeout(() => {
+        const i = waiters.indexOf(entry);
+        if (i !== -1) waiters.splice(i, 1);
+        engine.postMessage("stop"); // force the abort again so the next "go movetime" is clean
+        res(); // give up: the engine isn't going to answer
+      }, 1500);
+    });
+  }
 
   async function configureEngine(elo) {
     // Stockfish's calibrated Elo floor is 1320; below that, fall back to Skill Level
@@ -424,6 +512,7 @@
     thinking = true;
     setStatus("Thinking…");
     render();
+    await stopAnalysis(); // the background analysis runs on the player's turn
     if (Math.random() < randomMoveChance(prefs.elo)) {
       await new Promise((res) => setTimeout(res, 350 + Math.random() * 400)); // pretend to think
       const opts = game.moves({ verbose: true });
@@ -434,10 +523,12 @@
       lastMove = { from: made.from, to: made.to };
       saveGame();
       animateMade(made, () => {
-        if (!checkGameEnd()) setStatus("Your move");
+        if (!checkGameEnd()) { setStatus("Your move"); startAnalysis(); }
       });
       return;
     }
+    searchTurn = game.turn(); // the engine searches the current position, so its
+    // info lines are the ongoing evaluation of the position it has to move in
     engine.postMessage("position startpos" + (uciMoves.length ? " moves " + uciMoves.join(" ") : ""));
     engine.postMessage("go movetime " + moveTimeMs(prefs.elo));
     const line = await expect((l) => l.startsWith("bestmove"));
@@ -449,7 +540,7 @@
     lastMove = { from: made.from, to: made.to };
     saveGame();
     animateMade(made, () => {
-      if (!checkGameEnd()) setStatus("Your move");
+      if (!checkGameEnd()) { setStatus("Your move"); startAnalysis(); }
     });
   }
 
@@ -461,6 +552,9 @@
       return false;
     }
     gameOver = true;
+    if (analysisOn) { analysisOn = false; engine.postMessage("stop"); } // free the worker
+    resetEval();
+    evalEl.hidden = true;
     clearGameSave();
     const won = game.isCheckmate() && game.turn() !== playerSide;
     let msg;
@@ -502,12 +596,14 @@
     thinking = false;
     gameOver = false;
     overlay.classList.add("hidden");
+    evalEl.hidden = !showEval;
+    resetEval();
     saveGame();
     buildBoard();
     setStatus("Configuring engine…");
     await configureEngine(prefs.elo);
     if (playerSide === "b") engineMove();
-    else setStatus("Your move");
+    else { setStatus("Your move"); startAnalysis(); }
   }
 
   // Restore an in-progress game after a refresh
@@ -539,12 +635,14 @@
     thinking = false;
     gameOver = false;
     overlay.classList.add("hidden");
+    evalEl.hidden = !showEval;
+    resetEval();
     buildBoard();
     setStatus("Configuring engine…");
     await configureEngine(prefs.elo);
     if (game.isGameOver()) { checkGameEnd(); return; }
     if (game.turn() !== playerSide) engineMove();
-    else setStatus("Your move");
+    else { setStatus("Your move"); startAnalysis(); }
   }
 
   function undoPair() {
@@ -558,6 +656,8 @@
     saveGame();
     render();
     setStatus("Your move");
+    // Restart the analysis for the reverted position (it was analysing the old one)
+    if (showEval) stopAnalysis().then(startAnalysis);
   }
 
   // ---------- Setup UI ----------
@@ -603,6 +703,13 @@
   sideB.addEventListener("click", () => setSide("b"));
   sideR.addEventListener("click", () => setSide("rand"));
   setSide(prefs.random ? "rand" : prefs.side);
+
+  const evalOpt = document.getElementById("eval-opt");
+  evalOpt.checked = showEval;
+  evalOpt.addEventListener("change", () => {
+    showEval = evalOpt.checked;
+    try { localStorage.setItem("engine-eval", showEval ? "1" : "0"); } catch (e) { /* private browsing */ }
+  });
 
   document.getElementById("start").addEventListener("click", () => {
     ensureAudio();

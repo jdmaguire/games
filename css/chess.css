@@ -8,7 +8,7 @@
     --accent: #fbbf24;
     /* The vh term keeps the board (plus header, player rows and controls) inside
        short/wide windows; on phones the vmin term still wins. */
-    --board: min(94vmin, 560px, calc(100vh - 210px));
+    --board: min(94vmin, 560px, calc(100vh - 236px));
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body {
@@ -125,6 +125,37 @@
   .player .material .adv { margin-left: 6px; font-size: 12px; font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; }
   .chip.w, .tk.w { color: #e8edf5; }
   .chip.b, .tk.b { color: #7b8798; } /* board black is near-black — too dark on the page bg */
+  /* Engine evaluation bar: the filled width is the player's share of the position */
+  #eval {
+    width: var(--board);
+    height: 16px;
+    border-radius: 8px;
+    background: #242a3a;
+    position: relative;
+    overflow: hidden;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  }
+  #eval-fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 50%;
+    transition: width 0.25s ease;
+  }
+  #eval-score {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 800;
+    color: #f1f5f9;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.03em;
+  }
   #controls { display: flex; gap: 10px; width: var(--board); }
   button {
     flex: 1;
@@ -160,6 +191,8 @@
   #overlay .row { display: flex; gap: 10px; width: 100%; max-width: 320px; }
   #overlay .row button.on { border-color: var(--accent); background: #3a3320; }
   #overlay label { color: var(--muted); font-size: 14px; }
+  #overlay label.opt { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+  #overlay label.opt input { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
   #overlay input[type=range] { width: 100%; max-width: 320px; }
   #elo-label { font-size: 20px; font-weight: 800; color: var(--accent); }
   #ov-msg { color: var(--muted); font-size: 15px; line-height: 1.5; }

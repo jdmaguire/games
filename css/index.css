@@ -83,4 +83,28 @@
     padding: 2px 8px;
   }
   footer { color: var(--muted); font-size: 12px; text-align: center; }
+  #settings {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+    max-width: 720px;
+  }
+  .toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 18px;
+    background: var(--panel);
+    border: 2px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    color: var(--muted);
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .toggle input {
+    width: 20px;
+    height: 20px;
+    accent-color: #fbbf24;
+    cursor: pointer;
+  }
   @media (pointer: coarse) { .card .key { display: none; } }

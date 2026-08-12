@@ -35,8 +35,16 @@
       <label for="elo">Engine strength</label>
       <input type="range" id="elo" min="200" max="2850" step="25" value="200">
       <div id="elo-label"></div>
+      <label class="opt">
+        <input type="checkbox" id="eval-opt">
+        <span>Show live engine evaluation</span>
+      </label>
       <button id="start" style="max-width:320px; width:100%">Start Game</button>
     </div>
+  </div>
+  <div id="eval" hidden>
+    <div id="eval-fill"></div>
+    <div id="eval-score">…</div>
   </div>
   <div class="player" id="p-bot">
     <div class="name" id="bot-name"></div>
