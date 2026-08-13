@@ -124,7 +124,7 @@
   // in the worker on the player's turn. It shares the engine's exact code path,
   // so the number matches what the AI plays — and it warms the transposition
   // table the AI's very next search reuses.
-  const EVAL_LEVEL = 8; // LEVELS[8]: depth 11 — strong enough to read the position
+  const EVAL_LEVEL = 9; // LEVELS[8]: depth 11 — strong enough to read the position
   const EVAL_MS = 300;  // short eval budget so a pending eval never delays the AI's move
   let evalScore = null; // player-relative, positive = good for the player
   let evalTimer = null;

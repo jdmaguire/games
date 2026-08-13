@@ -29,7 +29,7 @@
     { label: "7 — ~1500 Elo", depth: 9,  ms: 500,  noise: 4,  random: 0 },
     { label: "8 — ~1700 Elo", depth: 11, ms: 750,  noise: 2,  random: 0 },
     { label: "9 — ~1900 Elo", depth: 13, ms: 1000, noise: 0,  random: 0 },
-    { label: "10 — ~2100 Elo", depth: 15, ms: 1300, noise: 0, random: 0 },
+    { label: "10 — ~2100 Elo", depth: 15, ms: 1500, noise: 0, random: 0 },
   ];
 
   // ---------- Rules ----------
