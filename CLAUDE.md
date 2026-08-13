@@ -25,7 +25,7 @@ you are changing. Markup, styling, and logic are three separate reads now.
 | Snake | `snake.html` (~28) | `css/snake.css` (76) | `js/snake.js` (309) |
 | Sockbot Showdown | `robot.html` (~32) | `css/robot.css` (107) | `js/robot.js` (**1656**) |
 | Chess | `chess.html` (~49) | `css/chess.css` (184) | `js/chess.js` (612) |
-| Checkers | `checkers.html` (~48) | `css/checkers.css` (180) | `js/checkers.js` (675) |
+| Checkers | `checkers.html` (~48) | `css/checkers.css` (180) | `js/checkers.js` (661) |
 | Breakout | `breakout.html` (~33) | `css/breakout.css` (77) | `js/breakout.js` (462) |
 | Minesweeper | `minesweeper.html` (~41) | `css/minesweeper.css` (109) | `js/minesweeper.js` (563) |
 
@@ -35,6 +35,7 @@ Shared, loaded by the pages that need them:
 | --- | --- | --- |
 | `js/shared/audio.js` | 58 | WebAudio synth: `window.GameAudio` = `{ ensureAudio, beep, thud }`. |
 | `js/shared/celebrate.js` | 74 | `window.GameCelebrate` = `{ showBanner, hideBanner, confetti }`. |
+| `js/shared/checkers-engine.js` | 257 | Checkers rules + negamax + transposition table. Dual-purpose: loaded as a classic script (`window.CheckersEngine` = `{ RED, BLK, LEVELS, genMoves, applyMove, undoMove, sideOf, isMan, aiPickMove }`) and spawned as a Worker (`askEngine`). One TT shared by eval + AI search. |
 
 Other: `readme.md` (player blurb), `robots.txt` + `sitemap.xml` (SEO, at repo root), `docs/token-notes.md` (what this repo costs to work in
 and what is still worth splitting), `docs/claude-settings.json` (copy-in settings),
@@ -43,10 +44,10 @@ and what is still worth splitting), `docs/claude-settings.json` (copy-in setting
 ## Cached codebase facts — `docs/memory/`
 
 `docs/memory/` holds facts that are expensive to re-derive from the code but too detailed
-for this file: exact `GameAudio`/`GameCelebrate` signatures, the JSON shape and load
-validation of every `localStorage` key, and the chess/checkers engine internals
-(Elo-weakening scheme, `LEVELS` table, board encoding). `docs/memory/MEMORY.md` is the
-index.
+for this file: exact `GameAudio`/`GameCelebrate`/`CheckersEngine` signatures, the JSON
+shape and load validation of every `localStorage` key, and the chess/checkers engine
+internals (Elo-weakening scheme, `LEVELS` table, board encoding). `docs/memory/MEMORY.md`
+is the index.
 
 **Check these files before grepping or reading source for anything they cover.** And keep
 them true: any change to code they describe — a shared-module signature, a storage key's
@@ -101,9 +102,11 @@ somewhere around 18k tokens; a single section costs a few hundred. See
 - **`js/chess.js`** — Preferences · Audio · Win celebration · Engine (Stockfish) ·
   Game state · Board rendering · Material counter · Player input · Drag to move ·
   Move animation · Engine turn · Game end / flow · Setup UI
-- **`js/checkers.js`** — Preferences · Audio · Win celebration · Rules · Engine
-  (negamax + alpha-beta) · Game state · Board rendering · Move animation · Material
-  counter · Turn flow · Drag to move · Setup UI
+- **`js/checkers.js`** — Preferences · Audio · Win celebration · Engine worker ·
+  Live evaluation · Game state · Board rendering · Move animation · Material
+  counter · Turn flow · Drag to move · Setup UI. Rules + negamax + the
+  transposition table live in `js/shared/checkers-engine.js` (run as a Worker;
+  degraded to a sync fallback when workers are blocked, e.g. `file://`).
 - **`js/breakout.js`** — Tuning · Audio · State · Sizing · Game setup · Physics ·
   Render · Main loop · Input: keyboard · Input: touch · Input: mouse · Boot.
   Gameplay runs in a fixed 100 × 140 logical playfield; `scale` is the only
@@ -146,7 +149,9 @@ There is nothing to run — no tests, no build, no lint. So:
 2. Syntax-check standalone JS with `node --check js/<file>.js`.
 3. To try it by hand, serve over HTTP — `python3 -m http.server` from the repo root, then
    open <http://localhost:8000>. **`file://` will not work for chess**: the Stockfish
-   Web Worker and the `chess-1.4.0.mjs` module import are both blocked there.
+   Web Worker and the `chess-1.4.0.mjs` module import are both blocked there. Checkers
+   survives `file://` by degrading to a synchronous search on the main thread, but only
+   the real Worker path exercises the transposition-table sharing this repo is about.
 4. State in the PR description what you could not verify. Do not claim a game was tested
    when it was not.
 

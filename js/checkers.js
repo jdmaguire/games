@@ -1,29 +1,13 @@
 (() => {
   "use strict";
 
-  // Piece codes: 1 red man, 2 red king, -1 black man, -2 black king, 0 empty.
-  // Red starts at the bottom (rows 5-7) and moves up; red moves first.
-  const RED = 1, BLK = -1;
-  const MAN_DIRS = { [RED]: [[-1, -1], [-1, 1]], [BLK]: [[1, -1], [1, 1]] };
-  const KING_DIRS = [[-1, -1], [-1, 1], [1, -1], [1, 1]];
-  const CROWN_ROW = { [RED]: 0, [BLK]: 7 };
+  // Piece codes, LEVELS, rules (genMoves/applyMove), and the negamax engine now
+  // live in js/shared/checkers-engine.js. It's loaded as a classic script here
+  // (for the rules gameplay needs) and spawned as a Worker for the AI's search,
+  // so the search never runs on the main thread. The eval + AI move share the
+  // Worker's transposition table, so no position is ever searched twice.
+  const { RED, BLK, LEVELS, genMoves, applyMove, sideOf, isMan, aiPickMove } = window.CheckersEngine;
   const DRAW_PLIES = 80; // plies without a capture or man move -> draw
-
-  // Strength levels: search depth + time budget + score noise (Elo labels are rough).
-  // `random` is the chance of just playing any legal move — how the lowest levels
-  // stay genuinely beatable for young kids.
-  const LEVELS = [
-    { label: "1 — first games, great for kids", depth: 1, ms: 60, noise: 200, random: 0.85 },
-    { label: "2 — ~500 Elo",  depth: 2,  ms: 80,   noise: 80, random: 0.45 },
-    { label: "3 — ~700 Elo",  depth: 2,  ms: 80,   noise: 40, random: 0.15 },
-    { label: "4 — ~900 Elo",  depth: 3,  ms: 120,  noise: 25, random: 0 },
-    { label: "5 — ~1100 Elo", depth: 5,  ms: 200,  noise: 15, random: 0 },
-    { label: "6 — ~1300 Elo", depth: 7,  ms: 320,  noise: 8,  random: 0 },
-    { label: "7 — ~1500 Elo", depth: 9,  ms: 500,  noise: 4,  random: 0 },
-    { label: "8 — ~1700 Elo", depth: 11, ms: 750,  noise: 2,  random: 0 },
-    { label: "9 — ~1900 Elo", depth: 13, ms: 1000, noise: 0,  random: 0 },
-    { label: "10 — ~2100 Elo", depth: 15, ms: 1300, noise: 0, random: 0 },
-  ];
 
   const boardEl = document.getElementById("board");
   const statusEl = document.getElementById("status");
@@ -95,155 +79,53 @@
     confetti(5000);
   }
 
-  // ---------- Rules ----------
-  const inB = (r, c) => r >= 0 && r < 8 && c >= 0 && c < 8;
-  const sideOf = (v) => (v > 0 ? RED : v < 0 ? BLK : 0);
-  const isMan = (v) => v === 1 || v === -1;
-  const dirsFor = (v) => (isMan(v) ? MAN_DIRS[sideOf(v)] : KING_DIRS);
-
-  function extendJumps(bd, r, c, piece, path, caps, out) {
-    let extended = false;
-    for (const [dr, dc] of dirsFor(piece)) {
-      const mr = r + dr, mc = c + dc, lr = r + 2 * dr, lc = c + 2 * dc;
-      if (!inB(lr, lc)) continue;
-      const mid = bd[mr][mc];
-      if (mid === 0 || sideOf(mid) === sideOf(piece) || bd[lr][lc] !== 0) continue;
-      extended = true;
-      const crowns = isMan(piece) && lr === CROWN_ROW[sideOf(piece)];
-      bd[r][c] = 0; bd[mr][mc] = 0; bd[lr][lc] = piece;
-      path.push([lr, lc]); caps.push([mr, mc]);
-      if (crowns) out.push({ path: path.slice(), caps: caps.slice() }); // crowning ends the turn
-      else extendJumps(bd, lr, lc, piece, path, caps, out);
-      path.pop(); caps.pop();
-      bd[lr][lc] = 0; bd[mr][mc] = mid; bd[r][c] = piece;
-    }
-    if (!extended && path.length > 1) out.push({ path: path.slice(), caps: caps.slice() });
+  // ---------- Engine worker ----------
+  // The AI searches in a Worker (js/shared/checkers-engine.js), so the main
+  // thread never blocks. Requests are { id, board, side, level, ms } → replies
+  // { id, move }. Both the AI's move and the live eval go through here; they
+  // share the Worker's transposition table, so the eval warms the AI's search.
+  let engine = null;
+  const engineWaiters = new Map(); // id -> { resolve, side, level, ms }
+  let engineSeq = 0;               // monotonically increasing request id
+  let engineDead = false;
+  try {
+    engine = new Worker("js/shared/checkers-engine.js");
+  } catch (e) {
+    engineDead = true; // file:// blocks workers — fall back to the sync engine
   }
-
-  function genMoves(bd, side) {
-    const jumps = [];
-    for (let r = 0; r < 8; r++) {
-      for (let c = 0; c < 8; c++) {
-        if (sideOf(bd[r][c]) !== side) continue;
-        extendJumps(bd, r, c, bd[r][c], [[r, c]], [], jumps);
-      }
-    }
-    if (jumps.length) return { moves: jumps, forced: true };
-    const moves = [];
-    for (let r = 0; r < 8; r++) {
-      for (let c = 0; c < 8; c++) {
-        const v = bd[r][c];
-        if (sideOf(v) !== side) continue;
-        for (const [dr, dc] of dirsFor(v)) {
-          const nr = r + dr, nc = c + dc;
-          if (inB(nr, nc) && bd[nr][nc] === 0) moves.push({ path: [[r, c], [nr, nc]], caps: [] });
-        }
-      }
-    }
-    return { moves, forced: false };
+  function syncSearch(side, level, ms) {
+    try { return aiPickMove(board, side, level, ms); }
+    catch (e) { return null; }
   }
-
-  function applyMove(bd, mv) {
-    const [r0, c0] = mv.path[0];
-    const [r1, c1] = mv.path[mv.path.length - 1];
-    const piece = bd[r0][c0];
-    const undo = { r0, c0, r1, c1, piece, caps: mv.caps.map(([r, c]) => [r, c, bd[r][c]]) };
-    bd[r0][c0] = 0;
-    for (const [cr, cc] of mv.caps) bd[cr][cc] = 0;
-    bd[r1][c1] = isMan(piece) && r1 === CROWN_ROW[sideOf(piece)] ? piece * 2 : piece;
-    return undo;
+  function askEngine(side, level, ms) {
+    // Fallback for file:// (like chess's worker, but we degrade instead of dying):
+    // the classic script above already loaded the same engine, so search in-line.
+    if (!engine || engineDead) return Promise.resolve(syncSearch(side, level, ms));
+    const id = ++engineSeq;
+    const p = new Promise((resolve) => engineWaiters.set(id, { resolve, side, level, ms }));
+    engine.postMessage({ id, board, side, level, ms });
+    return p;
   }
-
-  function undoMove(bd, u) {
-    bd[u.r1][u.c1] = 0;
-    for (const [cr, cc, v] of u.caps) bd[cr][cc] = v;
-    bd[u.r0][u.c0] = u.piece;
-  }
-
-  // ---------- Engine: negamax + alpha-beta + iterative deepening ----------
-  const TIMEOUT = Symbol("timeout");
-  let deadline = 0;
-
-  function evaluate(bd) {
-    let score = 0;
-    for (let r = 0; r < 8; r++) {
-      for (let c = 0; c < 8; c++) {
-        const v = bd[r][c];
-        if (v === 0) continue;
-        const center = r >= 2 && r <= 5 && c >= 2 && c <= 5 ? 4 : 0;
-        if (v === 1) score += 100 + (7 - r) * 4 + (r === 7 ? 6 : 0) + center;
-        else if (v === 2) score += 175 + center * 2;
-        else if (v === -1) score -= 100 + r * 4 + (r === 0 ? 6 : 0) + center;
-        else score -= 175 + center * 2;
-      }
-    }
-    return score; // positive = good for red
-  }
-
-  function negamax(bd, side, depth, alpha, beta) {
-    if (performance.now() > deadline) throw TIMEOUT;
-    const { moves, forced } = genMoves(bd, side);
-    if (moves.length === 0) return -50000 - depth; // no moves = loss (prefer later losses)
-    if (depth <= 0 && !forced) return side * evaluate(bd); // quiescence: keep resolving captures
-    let best = -Infinity;
-    for (const mv of moves) {
-      const u = applyMove(bd, mv);
-      const v = -negamax(bd, -side, depth - 1, -beta, -alpha);
-      undoMove(bd, u);
-      if (v > best) best = v;
-      if (best > alpha) alpha = best;
-      if (alpha >= beta) break;
-    }
-    return best;
-  }
-
-  function aiPickMove(bd0, side, level) {
-    // Search on a private copy: a TIMEOUT thrown mid-search skips undoMove calls,
-    // which would leave phantom moves applied to the live board.
-    const bd = bd0.map((row) => row.slice());
-    const { depth: maxDepth, ms, noise } = LEVELS[level];
-    deadline = performance.now() + ms;
-    const { moves } = genMoves(bd, side);
-    if (moves.length === 0) return null;
-    if (moves.length === 1) { moves[0].score = side * evaluate(bd); return moves[0]; }
-    // Lowest levels mostly just play something legal, like a young kid would
-    if (Math.random() < (LEVELS[level].random || 0)) {
-      const m = moves[Math.floor(Math.random() * moves.length)];
-      m.score = side * evaluate(bd);
-      return m;
-    }
-    let scored = moves.map((m) => ({ m, score: 0 }));
-    for (let d = 2; d <= maxDepth; d++) {
-      const prev = scored.map((e) => ({ m: e.m, score: e.score }));
-      try {
-        let a = -Infinity;
-        for (const e of scored) {
-          const u = applyMove(bd, e.m);
-          e.score = -negamax(bd, -side, d - 1, -Infinity, -a);
-          undoMove(bd, u);
-          if (e.score > a) a = e.score;
-        }
-        scored.sort((x, y) => y.score - x.score); // better ordering for the next depth
-      } catch (err) {
-        if (err !== TIMEOUT) throw err;
-        scored = prev; // discard the partially-scored depth
-        break;
-      }
-      if (performance.now() > deadline) break;
-    }
-    scored.sort((x, y) => y.score - x.score);
-    const margin = noise * 3;
-    const candidates = scored.filter((e) => e.score >= scored[0].score - margin);
-    const mv = candidates[Math.floor(Math.random() * candidates.length)].m;
-    mv.score = scored[0].score;
-    return mv;
+  if (engine) {
+    engine.onmessage = (e) => {
+      const w = engineWaiters.get(e.data.id);
+      if (w) { engineWaiters.delete(e.data.id); w.resolve(e.data.move); }
+    };
+    engine.onerror = () => {
+      engineDead = true; // kill the worker; settle in-flight requests via the sync engine
+      engine.terminate();
+      for (const w of engineWaiters.values()) w.resolve(syncSearch(w.side, w.level, w.ms));
+      engineWaiters.clear();
+    };
   }
 
   // ---------- Live evaluation ----------
-  // The eval bar shows a quick negamax score of the current position, run
-  // synchronously on the player's turn (the search only reads the board). It
-  // shares the engine's exact code path, so the number matches what the AI plays.
-  const EVAL_LEVEL = 8; // depth 13, 1s budget — strong enough to read the position
+  // The eval bar shows a quick negamax score of the current position, searched
+  // in the worker on the player's turn. It shares the engine's exact code path,
+  // so the number matches what the AI plays — and it warms the transposition
+  // table the AI's very next search reuses.
+  const EVAL_LEVEL = 8; // LEVELS[8]: depth 11 — strong enough to read the position
+  const EVAL_MS = 300;  // short eval budget so a pending eval never delays the AI's move
   let evalScore = null; // player-relative, positive = good for the player
   let evalTimer = null;
 
@@ -265,11 +147,14 @@
 
   function quickEval() {
     if (!showEval || gameOver || turn !== playerSide) return;
-    const mv = aiPickMove(board, playerSide, EVAL_LEVEL);
-    if (mv && typeof mv.score === "number") {
-      evalScore = mv.score; // already player-relative (side to move == player)
-      paintEval();
-    }
+    const seq = gameSeq;
+    askEngine(playerSide, EVAL_LEVEL, EVAL_MS).then((mv) => {
+      if (seq !== gameSeq || gameOver || turn !== playerSide) return; // superseded
+      if (mv && typeof mv.score === "number") {
+        evalScore = mv.score; // already player-relative (side to move == player)
+        paintEval();
+      }
+    });
   }
 
   // Kick the analysis off just after the "Your move" frame has painted
@@ -290,6 +175,7 @@
   let snapshots = [];         // undo stack: a board copy per completed player move
   let pendingSnap = null;     // board copy taken at the start of the player's turn;
                               // pushed into snapshots when their move completes
+  let gameSeq = 0;            // bumped on start/undo — stale engine replies are dropped
 
   function newBoard() {
     const bd = Array.from({ length: 8 }, () => new Array(8).fill(0));
@@ -582,8 +468,10 @@
     thinking = true;
     setStatus("Thinking…");
     render();
-    setTimeout(() => {
-      const mv = aiPickMove(board, aiSide, prefs.level);
+    const seq = gameSeq;
+    askEngine(aiSide, prefs.level).then((mv) => {
+      if (seq !== gameSeq) return; // a new game started while the engine searched
+      if (!mv) return endGame(playerSide);
       const pieceBefore = board[mv.path[0][0]][mv.path[0][1]];
       clock = mv.caps.length || isMan(pieceBefore) ? 0 : clock + 1;
       lastPath = mv.path;
@@ -592,7 +480,7 @@
         turn = playerSide;
         beginPlayerTurn();
       });
-    }, 60);
+    });
   }
 
   // Play out the AI's move one hop at a time so multi-jumps read clearly
@@ -654,6 +542,7 @@
     lastPath = [];
     snapshots = [];
     pendingSnap = null;
+    gameSeq++;
     overlay.classList.add("hidden");
     evalEl.hidden = !showEval;
     resetEval();
@@ -677,6 +566,7 @@
     const { moves } = genMoves(board, playerSide);
     activeMoves = moves;
     selected = null;
+    gameSeq++;
     saveGame();
     setStatus("Your move");
     render();

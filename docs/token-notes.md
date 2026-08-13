@@ -12,7 +12,7 @@ change loaded all of it, whatever you were actually touching.
 | `index.html` | 166 | 47 + 84 + 33 |
 | `snake.html` | 415 | 28 + 76 + 309 |
 | `chess.html` | 936 | 49 + 184 + 612 |
-| `checkers.html` | 995 | 48 + 180 + 675 |
+| `checkers.html` | 995 | 48 + 180 + 661 |
 | `robot.html` | 1831 | 32 + 107 + 1656 |
 
 A colour tweak to Sockbot Showdown went from 1831 lines to 107. A markup fix went from
