@@ -143,7 +143,8 @@
     if (!showEval) return;
     if (evalWhite === null) return resetEval();
     const mine = playerSide === "w" ? evalWhite : -evalWhite;    // player's advantage
-    const mineMate = playerSide === "w" ? evalMate : -evalMate;  // signed, player to deliver
+    const mineMate = evalMate === null ? null
+      : playerSide === "w" ? evalMate : -evalMate;               // signed, player to deliver
     // lichess's bar mapping: 1 pawn ≈ 59%, then it flattens as the edge grows
     const share = 100 / (1 + Math.exp(-0.00368208 * mine));
     evalFill.style.width = share.toFixed(1) + "%";
