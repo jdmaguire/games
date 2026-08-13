@@ -27,7 +27,7 @@ you are changing. Markup, styling, and logic are three separate reads now.
 | Chess | `chess.html` (~89) | `css/chess.css` (217) | `js/chess.js` (747) |
 | Checkers | `checkers.html` (~89) | `css/checkers.css` (213) | `js/checkers.js` (669) |
 | Breakout | `breakout.html` (~61) | `css/breakout.css` (77) | `js/breakout.js` (462) |
-| Minesweeper | `minesweeper.html` (~68) | `css/minesweeper.css` (120) | `js/minesweeper.js` (603) |
+| Minesweeper | `minesweeper.html` (~68) | `css/minesweeper.css` (120) | `js/minesweeper.js` (617) |
 | Connect Four | `connect4.html` (~92) | `css/connect4.css` (260) | `js/connect4.js` (526) |
 
 Shared, loaded by the pages that need them:
@@ -117,6 +117,8 @@ somewhere around 18k tokens; a single section costs a few hundred. See
   Render · Main loop · Input: keyboard · Input: touch · Input: mouse · Controls ·
   Boot. Mines are placed on the first reveal, with the first square and its
   neighbours guaranteed clear. Best-time per difficulty in `minesweeper-best`.
+  `orient()` in Sizing transposes the board (hard is 16×30) so its long side
+  follows the screen's long side, including mid-game on device rotation.
 - **`js/connect4.js`** — Preferences · Audio · Win celebration · Engine worker ·
   Live evaluation · Game state · Board rendering · Drop animation · The robot's
   hand · Turn flow · Game end / flow · Input: keyboard · Setup UI · Boot. Rules +

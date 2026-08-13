@@ -78,12 +78,25 @@
 
   // --- Sizing (crisp on retina, fits any viewport) ---
   let cell = 0;
+
+  // Keep the board's long side along the screen's long side (hard is 16×30),
+  // transposing a game in progress so rotating the device never strands a
+  // tall board on a wide screen. A transpose keeps every cell's neighbours.
+  function orient() {
+    const landscape = window.innerWidth > window.innerHeight;
+    if ((landscape && ROWS > COLS) || (!landscape && COLS > ROWS)) {
+      if (grid.length) grid = grid[0].map((_, x) => grid.map((row) => row[x]));
+      [COLS, ROWS] = [ROWS, COLS];
+      [cursor.x, cursor.y] = [cursor.y, cursor.x];
+    }
+  }
+
   function resize() {
+    orient();
     const hudSpace = 128;
     const maxW = Math.min(window.innerWidth, document.documentElement.clientWidth) - 24;
     const maxH = window.innerHeight - hudSpace - 24;
-    const size = Math.min(maxW, maxH, 600);
-    cell = Math.max(8, Math.min(48, Math.floor(size / Math.max(COLS, ROWS))));
+    cell = Math.max(8, Math.min(48, Math.floor(maxW / COLS), Math.floor(maxH / ROWS)));
     const w = cell * COLS, h = cell * ROWS;
     const dpr = window.devicePixelRatio || 1;
     canvas.style.width = w + "px";
@@ -210,6 +223,7 @@
 
   function toggleFlag(x, y) {
     if (over) return;
+    if (x >= COLS || y >= ROWS) return; // long-press cell captured before a rotation transposed the board
     const c = grid[y][x];
     if (c.revealed) return;
     c.flag = !c.flag;
