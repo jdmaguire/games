@@ -1,6 +1,6 @@
 ---
 name: shared-module-apis
-description: Exact signatures and behavior of window.GameAudio, window.GameCelebrate, and window.CheckersEngine so games can call them without reading js/shared/
+description: Exact signatures and behavior of window.GameAudio, window.GameCelebrate, window.CheckersEngine, and window.Connect4Engine so games can call them without reading js/shared/
 metadata: 
   node_type: memory
   type: project
@@ -8,7 +8,7 @@ metadata:
   modified: 2026-08-12T00:00:00.000Z
 ---
 
-Exact APIs of the shared modules (as of 2026-08-12), so callers never need to re-read `js/shared/audio.js`, `js/shared/celebrate.js`, or `js/shared/checkers-engine.js`:
+Exact APIs of the shared modules (as of 2026-08-13), so callers never need to re-read `js/shared/audio.js`, `js/shared/celebrate.js`, `js/shared/checkers-engine.js`, or `js/shared/connect4-engine.js`:
 
 **`window.GameAudio`** (js/shared/audio.js):
 - `ensureAudio()` — lazily creates/resumes the AudioContext; must be called from a real user gesture (iOS). Safe to call repeatedly.
@@ -30,3 +30,7 @@ Both load as classic scripts before each game's script; this also works for the 
 - `aiPickMove(bd0, side, level, ms)` returns `null` when no legal moves, otherwise a `{ path, caps, score }` object (`.score` is side-relative, positive = good for that side; only meaningful after a full search). `side` is the side TO MOVE.
 - A single transposition table (`Map`, Zobrist-keyed, capped at 200k entries) persists across all searches in one page session — the live eval warms the AI's very next search. `negamax` probes it for EXACT/LOWER/UPPER bounds and reorders moves by the stored best move.
 - When Workers are blocked (`file://`), `js/checkers.js` calls `aiPickMove` synchronously as a fallback instead of dying.
+
+**`window.Connect4Engine`** (js/shared/connect4-engine.js) — same dual-purpose pattern as CheckersEngine:
+- Classic script on `connect4.html` → `window.Connect4Engine = { RED, YEL, ROWS, COLS, LEVELS, genMoves, landingRow, applyMove, undoMove, isWinAt, winLine, aiPickMove }`. `RED = 1` (moves first), `YEL = -1`, `ROWS = 6`, `COLS = 7`; board is `number[6][7]` with `board[0]` the top row.
+- Also spawned as a Worker with the identical `{ id, board, side, level, ms } → { id, move }` protocol; here `move` is `{ col, row, score }` or `null`. `landingRow(bd, col)` → row a disc would land in, or -1 if the column is full. `winLine(bd, r, c)` → array of the winning cells through (r,c), or null. Same transposition table + `file://` sync-fallback story as checkers; engine details in [[game-engine-internals]].

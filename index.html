@@ -8,7 +8,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="description" content="Free browser games for kids, no downloads or sign-ups: Snake, Sockbot Showdown, Chess, Checkers, Breakout and Minesweeper. Works on iPad and Mac.">
+<meta name="description" content="Free browser games for kids, no downloads or sign-ups: Snake, Sockbot Showdown, Chess, Checkers, Breakout, Minesweeper and Connect Four. Works on iPad and Mac.">
 <title>Free Browser Games — Snake, Chess, Checkers &amp; More</title>
 <link rel="canonical" href="https://maguire.app/">
 <meta property="og:type" content="website">
@@ -34,7 +34,8 @@
     { "@type": "ListItem", "position": 3, "name": "Chess", "url": "https://maguire.app/chess.html" },
     { "@type": "ListItem", "position": 4, "name": "Checkers", "url": "https://maguire.app/checkers.html" },
     { "@type": "ListItem", "position": 5, "name": "Breakout", "url": "https://maguire.app/breakout.html" },
-    { "@type": "ListItem", "position": 6, "name": "Minesweeper", "url": "https://maguire.app/minesweeper.html" }
+    { "@type": "ListItem", "position": 6, "name": "Minesweeper", "url": "https://maguire.app/minesweeper.html" },
+    { "@type": "ListItem", "position": 7, "name": "Connect Four", "url": "https://maguire.app/connect4.html" }
   ]
 }
 </script>
@@ -86,11 +87,18 @@
       <div class="stat" id="minesweeper-stat"></div>
       <span class="key">Press 6</span>
     </a>
+    <a class="card connect4" href="connect4.html">
+      <div class="icon">🟡</div>
+      <h2>Connect Four</h2>
+      <p>Drop discs and get four in a row.<br>Beware the robot's sneaky hand.</p>
+      <div class="stat" id="connect4-stat"></div>
+      <span class="key">Press 7</span>
+    </a>
   </div>
   <div id="settings">
     <label class="toggle">
       <input type="checkbox" id="eval-toggle">
-      <span>Show the engine's evaluation bar in Chess &amp; Checkers</span>
+      <span>Show the engine's evaluation bar in Chess, Checkers &amp; Connect Four</span>
     </label>
   </div>
   <footer>Works in Safari on iOS (touch) and macOS

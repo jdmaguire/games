@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7035083353596708"
+     crossorigin="anonymous"></script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="Play Connect Four for free in your browser against a built-in engine with a sneaky robot hand. Ten difficulty levels. No download or sign-up needed.">
+<title>Connect Four — Free Browser Game</title>
+<link rel="canonical" href="https://maguire.app/connect4.html">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Free Browser Games">
+<meta property="og:title" content="Connect Four — Free Browser Game">
+<meta property="og:description" content="Play Connect Four for free in your browser against a built-in engine with a sneaky robot hand. Ten difficulty levels.">
+<meta property="og:url" content="https://maguire.app/connect4.html">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Connect Four — Free Browser Game">
+<meta name="twitter:description" content="Play Connect Four for free in your browser.">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "VideoGame",
+  "name": "Connect Four",
+  "url": "https://maguire.app/connect4.html",
+  "description": "Play Connect Four for free in your browser. Drop discs and get four in a row before the robot does!",
+  "genre": "Strategy",
+  "playMode": "SinglePlayer",
+  "audience": { "@type": "PeopleAudience", "suitableForAge": "4+" },
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+}
+</script>
+<link rel="stylesheet" href="css/connect4.css">
+</head>
+<body>
+  <header>
+    <a href="index.html">← Games</a>
+    <div id="status"></div>
+  </header>
+  <div class="player" id="p-top">
+    <div class="name" id="top-name"></div>
+  </div>
+  <div id="wrap">
+    <div id="board">
+      <div id="well"></div>
+      <div id="discs"></div>
+      <div id="frame"></div>
+      <div id="cols"></div>
+    </div>
+    <div id="overlay">
+      <h1>🟡 Connect Four</h1>
+      <div id="ov-msg">Drop discs and get four in a row before the robot does!</div>
+      <div class="row">
+        <button id="side-r" class="on">Play Red (first)</button>
+        <button id="side-y">Play Yellow</button>
+      </div>
+      <div class="row">
+        <button id="side-rand">Random colour</button>
+      </div>
+      <label for="lvl">Engine strength</label>
+      <input type="range" id="lvl" min="0" max="9" step="1" value="0">
+      <div id="lvl-label"></div>
+      <label class="opt">
+        <input type="checkbox" id="eval-opt">
+        <span>Show live engine evaluation</span>
+      </label>
+      <button id="start" style="max-width:320px; width:100%">Start Game</button>
+    </div>
+  </div>
+  <div id="eval" hidden>
+    <div id="eval-fill"></div>
+    <div id="eval-score">…</div>
+  </div>
+  <div class="player" id="p-bot">
+    <div class="name" id="bot-name"></div>
+  </div>
+  <div id="controls">
+    <button id="btn-new">New Game</button>
+    <button id="btn-undo" disabled>Undo</button>
+  </div>
+
+<script src="js/shared/audio.js"></script>
+<script src="js/shared/celebrate.js"></script>
+<script src="js/shared/connect4-engine.js"></script>
+<script src="js/connect4.js"></script>
+</body>
+</html>

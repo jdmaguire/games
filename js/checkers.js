@@ -124,7 +124,7 @@
   // in the worker on the player's turn. It shares the engine's exact code path,
   // so the number matches what the AI plays — and it warms the transposition
   // table the AI's very next search reuses.
-  const EVAL_LEVEL = 9; // LEVELS[9]: depth 13 — strong enough to read the position
+  const EVAL_LEVEL = 9; // LEVELS[9]: depth 15 — strong enough to read the position
   const EVAL_MS = 300;  // short eval budget so a pending eval never delays the AI's move
   let evalScore = null; // player-relative, positive = good for the player
   let evalTimer = null;
@@ -137,7 +137,7 @@
   function paintEval() {
     if (!showEval) return;
     if (evalScore === null) return resetEval();
-    const mine = playerSide === RED ? evalScore : -evalScore;
+    const mine = evalScore; // side-to-move-relative, and the eval only runs on the player's turn
     // 1 man ≈ 100 here, so the raw number is already "centipawns"; map it like lichess
     const share = 100 / (1 + Math.exp(-0.00368208 * mine));
     evalFill.style.width = share.toFixed(1) + "%";

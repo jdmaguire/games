@@ -1,0 +1,260 @@
+  :root {
+    --bg: #0f172a;
+    --panel: #1e293b;
+    --text: #f1f5f9;
+    --muted: #94a3b8;
+    --frame: #1d4ed8;
+    --frame-edge: #1e40af;
+    --well: #0b1120;
+    --red: #ef4444;
+    --yel: #facc15;
+    --accent: #60a5fa;
+    /* The board is 7 columns × 7 rows: the top row is the open staging lane
+       discs drop through, the bottom 6 are the framed grid. The vh term keeps
+       it (plus header, name rows and controls) inside short/wide windows. */
+    --board: min(94vmin, 560px, calc(100vh - 220px));
+    --cell: calc(var(--board) / 7);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
+  }
+  body {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    height: 100vh;
+    height: 100dvh;
+    padding: max(10px, env(safe-area-inset-top))
+             max(10px, env(safe-area-inset-right))
+             max(10px, env(safe-area-inset-bottom))
+             max(10px, env(safe-area-inset-left));
+  }
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: var(--board);
+    gap: 10px;
+  }
+  header a { color: var(--muted); text-decoration: none; font-size: 14px; white-space: nowrap; }
+  #status { font-size: 15px; font-weight: 600; text-align: right; min-height: 1.2em; }
+  #wrap { position: relative; }
+  #board { position: relative; width: var(--board); aspect-ratio: 1; }
+  /* Layers, bottom to top: the dark well behind the holes, the discs (static +
+     falling), the frame with punched-out holes the discs show through, and the
+     column tap strips. A falling disc starts in the open lane above the frame,
+     then passes behind it — visible only through the holes, like the real toy. */
+  #well {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    top: var(--cell);
+    background: var(--well);
+    border-radius: 12px;
+  }
+  #discs { position: absolute; inset: 0; z-index: 1; }
+  #frame {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    top: var(--cell);
+    z-index: 2;
+    pointer-events: none;
+    border-radius: 12px;
+    background: radial-gradient(circle closest-side, transparent 0 70%, rgba(0, 0, 0, 0.35) 71% 79%, var(--frame) 80%)
+                0 0 / calc(100% / 7) calc(100% / 6);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), inset 0 0 0 2px var(--frame-edge);
+  }
+  #cols { position: absolute; inset: 0; z-index: 3; display: flex; }
+  .colstrip { flex: 1; position: relative; cursor: pointer; }
+  /* Ghost of your disc in the lane over the hovered column (desktop only) */
+  .colstrip::before {
+    content: "";
+    position: absolute;
+    top: calc(var(--cell) * 0.1);
+    left: 10%;
+    width: 80%;
+    height: calc(var(--cell) * 0.8);
+    border-radius: 50%;
+    background: var(--you, transparent);
+    opacity: 0;
+    transition: opacity 0.1s;
+  }
+  @media (hover: hover) {
+    #board:not(.busy) .colstrip:hover { background: rgba(255, 255, 255, 0.04); }
+    #board:not(.busy) .colstrip:hover::before { opacity: 0.35; }
+  }
+  #board.busy .colstrip { cursor: default; }
+  .cell {
+    position: absolute;
+    width: calc(100% / 7);
+    height: calc(100% / 7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .cell.fall {
+    transition-property: transform;
+    /* accelerate like gravity; duration is set per drop from the fall height */
+    transition-timing-function: cubic-bezier(0.5, 0, 0.85, 0.6);
+    will-change: transform;
+  }
+  .pc {
+    width: 80%;
+    height: 80%;
+    border-radius: 50%;
+    position: relative;
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.45), inset 0 -4px 0 rgba(0, 0, 0, 0.3), inset 0 3px 0 rgba(255, 255, 255, 0.18);
+  }
+  .pc.red { background: radial-gradient(circle at 35% 30%, #f87171, #b91c1c 70%); }
+  .pc.yel { background: radial-gradient(circle at 35% 30%, #fde68a, #d97706 72%); }
+  /* The freshest disc gets a marker dot and a little landing squash */
+  .pc.last { animation: settle 0.16s ease-out; transform-origin: 50% 100%; }
+  .pc.last::after {
+    content: "";
+    position: absolute;
+    inset: 41%;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.65);
+  }
+  @keyframes settle { from { transform: scaleY(0.78); } to { transform: scaleY(1); } }
+  .pc.winline { animation: winpulse 0.7s ease-in-out infinite alternate; }
+  @keyframes winpulse { from { filter: brightness(1); } to { filter: brightness(1.7); } }
+  /* The robot's hand: hovers in the lane holding its disc, then opens */
+  .hand {
+    position: absolute;
+    top: 0;
+    width: calc(100% / 7);
+    height: calc(100% / 7);
+    z-index: 4;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(-45%);
+    will-change: left, transform, opacity;
+  }
+  .hand.in { opacity: 1; transform: translateY(0); }
+  .hand.out { opacity: 0; transform: translateY(-55%); }
+  .hand .mitt {
+    position: absolute;
+    left: 50%;
+    top: -12%;
+    transform: translateX(-50%) rotate(180deg); /* reaching down from above */
+    font-size: calc(var(--cell) * 0.66);
+    line-height: 1;
+    filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.5));
+  }
+  /* Player rows: just names here — Connect Four has no captures to count */
+  .player { display: flex; flex-direction: column; gap: 3px; width: var(--board); }
+  .player .name { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 700; min-height: 17px; }
+  .player .name .sub { color: var(--muted); font-weight: 600; font-size: 12px; }
+  .dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+    box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.3), inset 0 2px 0 rgba(255, 255, 255, 0.18);
+  }
+  .dot.red { background: radial-gradient(circle at 35% 30%, #f87171, #b91c1c 70%); }
+  .dot.yel { background: radial-gradient(circle at 35% 30%, #fde68a, #d97706 72%); }
+  #controls { display: flex; gap: 10px; width: var(--board); }
+  /* Engine evaluation bar: the filled width is the player's share of the position */
+  #eval {
+    width: var(--board);
+    height: 16px;
+    border-radius: 8px;
+    background: #242a3a;
+    position: relative;
+    overflow: hidden;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  }
+  #eval-fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 50%;
+    transition: width 0.25s ease;
+  }
+  #eval-score {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 800;
+    color: #f1f5f9;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.03em;
+  }
+  button {
+    flex: 1;
+    padding: 12px;
+    border: 2px solid rgba(255, 255, 255, 0.14);
+    border-radius: 12px;
+    background: var(--panel);
+    color: var(--text);
+    font: 700 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  button:active { background: #34405f; }
+  button:disabled { opacity: 0.4; }
+  .winbanner {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    font-size: clamp(36px, 11vmin, 72px);
+    font-weight: 800;
+    color: #fbbf24;
+    text-shadow: 0 3px 12px rgba(0, 0, 0, 0.7);
+    z-index: 6;
+    pointer-events: none;
+    animation: pop 0.5s cubic-bezier(0.2, 2.2, 0.4, 1);
+  }
+  @keyframes pop { from { transform: scale(0.2); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  #overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    background: rgba(10, 12, 26, 0.88);
+    -webkit-backdrop-filter: blur(5px);
+    backdrop-filter: blur(5px);
+    border-radius: 8px;
+    padding: 20px;
+    text-align: center;
+    z-index: 5;
+  }
+  #overlay.hidden { display: none; }
+  #overlay h1 { font-size: 30px; font-weight: 800; }
+  #overlay .row { display: flex; gap: 10px; width: 100%; max-width: 320px; }
+  #overlay .row button.on { border-color: var(--accent); background: #16283f; }
+  #overlay label { color: var(--muted); font-size: 14px; }
+  #overlay label.opt { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+  #overlay label.opt input { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
+  #overlay input[type=range] { width: 100%; max-width: 320px; }
+  #lvl-label { font-size: 20px; font-weight: 800; color: var(--accent); }
+  #ov-msg { color: var(--muted); font-size: 15px; line-height: 1.5; }

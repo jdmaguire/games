@@ -73,6 +73,7 @@
   .card.checkers h2 { color: #fbbf24; }
   .card.breakout h2 { color: #38bdf8; }
   .card.minesweeper h2 { color: #e879f9; }
+  .card.connect4 h2 { color: #fb923c; }
   .card p { color: var(--muted); font-size: 14px; line-height: 1.5; }
   .card .stat { font-size: 13px; font-weight: 700; color: var(--text); opacity: 0.9; }
   .card .key {
