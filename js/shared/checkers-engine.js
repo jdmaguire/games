@@ -20,16 +20,16 @@
   // `random` is the chance of just playing any legal move — how the lowest levels
   // stay genuinely beatable for young kids.
   const LEVELS = [
-    { label: "1 — first games, great for kids", depth: 1, ms: 60, noise: 200, random: 0.85 },
+    { label: "1 — first games, great for kids", depth: 1, ms: 60,  noise: 200, random: 0.85 },
     { label: "2 — ~500 Elo",  depth: 2,  ms: 80,   noise: 80, random: 0.45 },
     { label: "3 — ~700 Elo",  depth: 2,  ms: 80,   noise: 40, random: 0.15 },
-    { label: "4 — ~900 Elo",  depth: 3,  ms: 120,  noise: 25, random: 0 },
-    { label: "5 — ~1100 Elo", depth: 5,  ms: 200,  noise: 15, random: 0 },
-    { label: "6 — ~1300 Elo", depth: 7,  ms: 320,  noise: 8,  random: 0 },
-    { label: "7 — ~1500 Elo", depth: 9,  ms: 500,  noise: 4,  random: 0 },
-    { label: "8 — ~1700 Elo", depth: 11, ms: 750,  noise: 2,  random: 0 },
-    { label: "9 — ~1900 Elo", depth: 13, ms: 1000, noise: 0,  random: 0 },
-    { label: "10 — ~2100 Elo", depth: 15, ms: 1500, noise: 0, random: 0 },
+    { label: "4 — ~900 Elo",  depth: 3,  ms: 250,  noise: 25, random: 0 },
+    { label: "5 — ~1100 Elo", depth: 5,  ms: 350,  noise: 15, random: 0 },
+    { label: "6 — ~1300 Elo", depth: 7,  ms: 500,  noise: 8,  random: 0 },
+    { label: "7 — ~1500 Elo", depth: 9,  ms: 750,  noise: 4,  random: 0 },
+    { label: "8 — ~1700 Elo", depth: 11, ms: 1000, noise: 2,  random: 0 },
+    { label: "9 — ~1900 Elo", depth: 13, ms: 1500, noise: 0,  random: 0 },
+    { label: "10 — ~2100 Elo", depth: 15, ms: 2000, noise: 0, random: 0 },
   ];
 
   // ---------- Rules ----------
