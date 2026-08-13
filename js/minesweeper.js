@@ -21,6 +21,7 @@
   const overlayTitle = document.getElementById("overlay-title");
   const overlayScore = document.getElementById("overlay-score");
   const overlayHint = document.getElementById("overlay-hint");
+  const viewBoardEl = document.getElementById("view-board");
 
   // roundRect shipped in Safari 16; fall back to plain rects before that
   if (!CanvasRenderingContext2D.prototype.roundRect) {
@@ -65,6 +66,7 @@
   let state = "idle";
   let flagMode = false;
   let dirty = true;
+  let overlayTimer = null; // delays the win/lost screen so the final field shows first
 
   let best = { easy: 0, medium: 0, hard: 0 };
   try {
@@ -219,6 +221,7 @@
 
   // --- Match flow ---
   function start() {
+    clearTimeout(overlayTimer); // a restart during the delay must not pop the old result
     newBoard();
     state = "playing";
     overlay.classList.add("hidden");
@@ -240,7 +243,10 @@
       }
     }
     sfx.lose();
-    showOverlay("Boom!", "You hit a mine.", isTouch ? "Tap to play again" : "Press any key to play again");
+    // Leave the field up for a beat so the player can see which mine got them
+    clearTimeout(overlayTimer);
+    overlayTimer = setTimeout(() =>
+      showOverlay("Boom!", "You hit a mine.", isTouch ? "Tap to play again" : "Press any key to play again"), 3000);
     dirty = true;
   }
 
@@ -262,7 +268,10 @@
     }
     sfx.win();
     window.GameCelebrate.confetti(1600);
-    showOverlay("Cleared!", "Time: " + t + "s", isTouch ? "Tap to play again" : "Press any key to play again");
+    // Let the cleared field and the confetti have the stage first
+    clearTimeout(overlayTimer);
+    overlayTimer = setTimeout(() =>
+      showOverlay("Cleared!", "Time: " + t + "s", isTouch ? "Tap to play again" : "Press any key to play again"), 2500);
     dirty = true;
   }
 
@@ -275,6 +284,7 @@
       overlayScore.hidden = true;
     }
     overlayHint.innerHTML = hint;
+    viewBoardEl.hidden = !over; // only a finished field is worth a look back
     overlay.classList.remove("hidden");
   }
 
@@ -554,6 +564,14 @@
   faceEl.addEventListener("click", () => {
     GA.ensureAudio();
     start();
+  });
+
+  // Hide the win/lost screen to study the final field; any restart gesture still works
+  viewBoardEl.addEventListener("mousedown", (e) => e.stopPropagation()); // don't trip the overlay's tap-to-restart
+  viewBoardEl.addEventListener("click", (e) => {
+    e.stopPropagation();
+    GA.ensureAudio();
+    overlay.classList.add("hidden");
   });
 
   flagModeEl.addEventListener("click", () => {

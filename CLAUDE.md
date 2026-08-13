@@ -22,13 +22,13 @@ you are changing. Markup, styling, and logic are three separate reads now.
 | Page | Shell | Styles | Logic |
 | --- | --- | --- | --- |
 | Game-select menu | `index.html` (~111) | `css/index.css` (111) | `js/index.js` (59) |
-| Snake | `snake.html` (~28) | `css/snake.css` (76) | `js/snake.js` (309) |
-| Sockbot Showdown | `robot.html` (~32) | `css/robot.css` (107) | `js/robot.js` (**1656**) |
-| Chess | `chess.html` (~49) | `css/chess.css` (184) | `js/chess.js` (612) |
-| Checkers | `checkers.html` (~48) | `css/checkers.css` (180) | `js/checkers.js` (661) |
-| Breakout | `breakout.html` (~33) | `css/breakout.css` (77) | `js/breakout.js` (462) |
-| Minesweeper | `minesweeper.html` (~41) | `css/minesweeper.css` (109) | `js/minesweeper.js` (563) |
-| Connect Four | `connect4.html` (~91) | `css/connect4.css` (260) | `js/connect4.js` (521) |
+| Snake | `snake.html` (~56) | `css/snake.css` (76) | `js/snake.js` (309) |
+| Sockbot Showdown | `robot.html` (~60) | `css/robot.css` (107) | `js/robot.js` (**1656**) |
+| Chess | `chess.html` (~89) | `css/chess.css` (217) | `js/chess.js` (747) |
+| Checkers | `checkers.html` (~89) | `css/checkers.css` (213) | `js/checkers.js` (669) |
+| Breakout | `breakout.html` (~61) | `css/breakout.css` (77) | `js/breakout.js` (462) |
+| Minesweeper | `minesweeper.html` (~68) | `css/minesweeper.css` (120) | `js/minesweeper.js` (603) |
+| Connect Four | `connect4.html` (~92) | `css/connect4.css` (260) | `js/connect4.js` (526) |
 
 Shared, loaded by the pages that need them:
 
@@ -36,7 +36,7 @@ Shared, loaded by the pages that need them:
 | --- | --- | --- |
 | `js/shared/audio.js` | 58 | WebAudio synth: `window.GameAudio` = `{ ensureAudio, beep, thud }`. |
 | `js/shared/celebrate.js` | 74 | `window.GameCelebrate` = `{ showBanner, hideBanner, confetti }`. |
-| `js/shared/checkers-engine.js` | 257 | Checkers rules + negamax + transposition table. Dual-purpose: loaded as a classic script (`window.CheckersEngine` = `{ RED, BLK, LEVELS, genMoves, applyMove, undoMove, sideOf, isMan, aiPickMove }`) and spawned as a Worker (`askEngine`). One TT shared by eval + AI search. |
+| `js/shared/checkers-engine.js` | 270 | Checkers rules + negamax + transposition table. Dual-purpose: loaded as a classic script (`window.CheckersEngine` = `{ RED, BLK, LEVELS, genMoves, applyMove, undoMove, sideOf, isMan, aiPickMove }`) and spawned as a Worker (`askEngine`). One TT shared by eval + AI search. |
 | `js/shared/connect4-engine.js` | 259 | Connect Four rules + negamax + transposition table. Same dual-purpose pattern: classic script (`window.Connect4Engine` = `{ RED, YEL, ROWS, COLS, LEVELS, genMoves, landingRow, applyMove, undoMove, isWinAt, winLine, aiPickMove }`) and Worker with the same `{ id, board, side, level, ms }` protocol. |
 
 Other: `readme.md` (player blurb), `robots.txt` + `sitemap.xml` (SEO, at repo root), `docs/token-notes.md` (what this repo costs to work in

@@ -20,6 +20,7 @@
   const sideRand = document.getElementById("side-rand");
   const btnNew = document.getElementById("btn-new");
   const btnUndo = document.getElementById("btn-undo");
+  const btnView = document.getElementById("btn-view");
   const topName = document.getElementById("top-name");
   const botName = document.getElementById("bot-name");
   const topMat = document.getElementById("top-mat");
@@ -521,6 +522,7 @@
     clearTimeout(endTimer);
     endTimer = setTimeout(() => {
       hideBanner();
+      btnView.hidden = false; // a finished game is on the board — offer a look back
       overlay.classList.remove("hidden");
       syncSideUI();
     }, won ? 5000 : 1600);
@@ -617,9 +619,12 @@
   });
   btnNew.addEventListener("click", () => {
     ovMsg.textContent = "English draughts vs a built-in engine. Captures are mandatory!";
+    btnView.hidden = !gameOver;
     overlay.classList.remove("hidden");
   });
   btnUndo.addEventListener("click", undoTurn);
+  // Step out of the menu to study the finished board; New Game brings it back
+  btnView.addEventListener("click", () => overlay.classList.add("hidden"));
 
   // Boot: resume a saved game if one exists, otherwise show the menu
   const validBoard = (b) => Array.isArray(b) && b.length === 8 &&
