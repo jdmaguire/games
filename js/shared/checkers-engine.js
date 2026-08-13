@@ -175,9 +175,15 @@
     const key = zobrist(bd);
     const ent = TT.get(key.lo);
     if (ent && ent.hi === key.hi && ent.side === side && ent.depth >= depth) {
-      if (ent.flag === 0) return ent.score;                          // EXACT
-      if (ent.flag === 1 && ent.score >= beta) return ent.score;     // LOWER bound
-      if (ent.flag === 2 && ent.score <= alpha) return ent.score;    // UPPER bound
+      // Win/loss scores encode distance-to-mate as remaining depth, so an entry
+      // written at a deeper search must be re-based to this node's depth —
+      // otherwise "loses in 2" and "loses in 4" stop being distinguishable.
+      let s = ent.score;
+      if (s > 40000) s -= ent.depth - depth;
+      else if (s < -40000) s += ent.depth - depth;
+      if (ent.flag === 0) return s;                          // EXACT
+      if (ent.flag === 1 && s >= beta) return s;             // LOWER bound
+      if (ent.flag === 2 && s <= alpha) return s;            // UPPER bound
     }
 
     // Try the previously-best move first — cheap ordering that sharpens alpha-beta
@@ -244,7 +250,9 @@
       if (performance.now() > deadline) break;
     }
     scored.sort((x, y) => y.score - x.score);
-    const margin = lvl.noise * 3;
+    // Noise never blurs a forced result (see connect4-engine.js): decisive
+    // scores pick strictly best — quickest win, longest defence.
+    const margin = Math.abs(scored[0].score) >= 40000 ? 0 : lvl.noise * 3;
     const candidates = scored.filter((e) => e.score >= scored[0].score - margin);
     const mv = candidates[Math.floor(Math.random() * candidates.length)].m;
     mv.score = scored[0].score;
