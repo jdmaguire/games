@@ -91,6 +91,18 @@
     return null;
   }
 
+  // Columns where `who` completes a four by dropping right now — the live threats
+  // on the board. Used only for the root tiebreak, never in the hot search path.
+  function winningCols(bd, who) {
+    const out = [];
+    for (const c of genMoves(bd)) {
+      const r = applyMove(bd, c, who);
+      if (isWinAt(bd, r, c)) out.push(c);
+      undoMove(bd, c, r);
+    }
+    return out;
+  }
+
   // Every 4-cell window that only one side occupies is scored: a three with a
   // gap is a live threat, a two is a lean; mixed windows are dead. Plus a small
   // bonus for owning the centre column, which crosses the most windows.
@@ -253,7 +265,33 @@
     // AI would stop blocking once it saw it was lost either way. Decisive
     // scores pick strictly best — quickest win, longest defence.
     const margin = Math.abs(scored[0].score) >= 40000 ? 0 : (lvl.noise || 0) * 3;
-    const candidates = scored.filter((e) => e.score >= scored[0].score - margin);
+    let candidates = scored.filter((e) => e.score >= scored[0].score - margin);
+    // Third tiebreak, after the score and after how long the game lasts: stop
+    // connect fours. When the result is already settled every move scores the
+    // same — if the player has two ways to finish, or one that just stacks on
+    // top of the square we block, then blocking grades out exactly equal to
+    // ignoring them — and the AI would flop down a random disc while the player
+    // completes their four unopposed. So among moves that are otherwise
+    // identical, take the square they were going to win on, then leave them the
+    // fewest ways to finish. It costs nothing when the loss is real, and it
+    // keeps the AI in the game whenever the player misses their own finish.
+    // Only exact ties qualify: at the low levels `margin` deliberately widens
+    // the pool to near-best moves, and picking the sharpest of those would undo
+    // the weakening that makes the early levels beatable.
+    if (candidates.length > 1 && candidates.every((e) => e.score === scored[0].score)) {
+      // On a fresh copy: a timed-out search leaves phantom discs applied to `bd`.
+      const clean = bd0.map((row) => row.slice());
+      const threats = winningCols(clean, -side);
+      const defence = (col) => {
+        const r = applyMove(clean, col, side);
+        const left = winningCols(clean, -side).length;
+        undoMove(clean, col, r);
+        return (threats.includes(col) ? 100 : 0) - left; // block first, then minimise what is left
+      };
+      const ranked = candidates.map((e) => ({ e, d: defence(e.col) }));
+      const best = Math.max(...ranked.map((x) => x.d));
+      candidates = ranked.filter((x) => x.d === best).map((x) => x.e);
+    }
     const pick = candidates[Math.floor(Math.random() * candidates.length)];
     return finish(pick.col, scored[0].score);
   }
