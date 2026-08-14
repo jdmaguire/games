@@ -12,9 +12,16 @@
   // Piece codes: 1 red man, 2 red king, -1 black man, -2 black king, 0 empty.
   // Red starts at the bottom (rows 5-7) and moves up; red moves first.
   const RED = 1, BLK = -1;
-  const MAN_DIRS = { [RED]: [[-1, -1], [-1, 1]], [BLK]: [[1, -1], [1, 1]] };
-  const KING_DIRS = [[-1, -1], [-1, 1], [1, -1], [1, 1]];
-  const CROWN_ROW = { [RED]: 0, [BLK]: 7 };
+  // The four diagonals, as two flat arrays rather than an array of pairs and a
+  // pair of side-keyed objects. A king uses all four; a red man uses 0-1 (up the
+  // board) and a black man 2-3 (down). That ordering is load-bearing: it is the
+  // order the old MAN_DIRS/KING_DIRS produced, and move generation order feeds
+  // straight into search order, so changing it would change which move the AI
+  // picks among equals.
+  const DR = [-1, -1, 1, 1], DC = [-1, 1, -1, 1];
+  const dirFrom = (v) => (v === 1 ? 0 : v === -1 ? 2 : 0);
+  const dirTo = (v) => (v === 1 ? 2 : v === -1 ? 4 : 4);
+  const crownRow = (v) => (v > 0 ? 0 : 7);
 
   // Strength levels: search depth + time budget + score noise (Elo labels are rough).
   // `random` is the chance of just playing any legal move — how the lowest levels
@@ -36,17 +43,17 @@
   const inB = (r, c) => r >= 0 && r < 8 && c >= 0 && c < 8;
   const sideOf = (v) => (v > 0 ? RED : v < 0 ? BLK : 0);
   const isMan = (v) => v === 1 || v === -1;
-  const dirsFor = (v) => (isMan(v) ? MAN_DIRS[sideOf(v)] : KING_DIRS);
 
   function extendJumps(bd, r, c, piece, path, caps, out) {
     let extended = false;
-    for (const [dr, dc] of dirsFor(piece)) {
+    for (let d = dirFrom(piece), end = dirTo(piece); d < end; d++) {
+      const dr = DR[d], dc = DC[d];
       const mr = r + dr, mc = c + dc, lr = r + 2 * dr, lc = c + 2 * dc;
       if (!inB(lr, lc)) continue;
       const mid = bd[mr][mc];
       if (mid === 0 || sideOf(mid) === sideOf(piece) || bd[lr][lc] !== 0) continue;
       extended = true;
-      const crowns = isMan(piece) && lr === CROWN_ROW[sideOf(piece)];
+      const crowns = isMan(piece) && lr === crownRow(piece);
       bd[r][c] = 0; bd[mr][mc] = 0; bd[lr][lc] = piece;
       path.push([lr, lc]); caps.push([mr, mc]);
       if (crowns) out.push({ path: path.slice(), caps: caps.slice() }); // crowning ends the turn
@@ -71,8 +78,8 @@
       for (let c = 0; c < 8; c++) {
         const v = bd[r][c];
         if (sideOf(v) !== side) continue;
-        for (const [dr, dc] of dirsFor(v)) {
-          const nr = r + dr, nc = c + dc;
+        for (let d = dirFrom(v), end = dirTo(v); d < end; d++) {
+          const nr = r + DR[d], nc = c + DC[d];
           if (inB(nr, nc) && bd[nr][nc] === 0) moves.push({ path: [[r, c], [nr, nc]], caps: [] });
         }
       }
@@ -80,20 +87,35 @@
     return { moves, forced: false };
   }
 
+  // The undo record doubles as the move's Zobrist delta: it already names every
+  // square that changed, so the search never rehashes the board (see `zobrist`).
+  // `caps` is flat (r, c, value) triples — one array per move instead of one per
+  // captured piece.
   function applyMove(bd, mv) {
     const [r0, c0] = mv.path[0];
     const [r1, c1] = mv.path[mv.path.length - 1];
     const piece = bd[r0][c0];
-    const undo = { r0, c0, r1, c1, piece, caps: mv.caps.map(([r, c]) => [r, c, bd[r][c]]) };
+    const caps = [];
+    let zlo = 0, zhi = 0;
+    for (const [cr, cc] of mv.caps) {
+      const v = bd[cr][cc];
+      caps.push(cr, cc, v);
+      const i = zi(cr, cc, v);
+      zlo ^= ZLO[i]; zhi ^= ZHI[i];
+      bd[cr][cc] = 0;
+    }
     bd[r0][c0] = 0;
-    for (const [cr, cc] of mv.caps) bd[cr][cc] = 0;
-    bd[r1][c1] = isMan(piece) && r1 === CROWN_ROW[sideOf(piece)] ? piece * 2 : piece;
-    return undo;
+    const placed = isMan(piece) && r1 === crownRow(piece) ? piece * 2 : piece;
+    bd[r1][c1] = placed;
+    const i0 = zi(r0, c0, piece), i1 = zi(r1, c1, placed);
+    zlo ^= ZLO[i0] ^ ZLO[i1]; zhi ^= ZHI[i0] ^ ZHI[i1];
+    return { r0, c0, r1, c1, piece, caps, zlo, zhi };
   }
 
   function undoMove(bd, u) {
     bd[u.r1][u.c1] = 0;
-    for (const [cr, cc, v] of u.caps) bd[cr][cc] = v;
+    const caps = u.caps;
+    for (let i = 0; i < caps.length; i += 3) bd[caps[i]][caps[i + 1]] = caps[i + 2];
     bd[u.r0][u.c0] = u.piece;
   }
 
@@ -128,6 +150,11 @@
     return t;
   })();
 
+  const zi = (r, c, v) => (r * 8 + c) * 5 + (v + 2);
+
+  // Full recompute — only ever needed once, for the root. Every node below it
+  // gets its key by XORing in the delta `applyMove` already computed, which is
+  // why the key is threaded through `negamax` as two plain numbers.
   function zobrist(bd) {
     let lo = 0, hi = 0;
     for (let r = 0; r < 8; r++) {
@@ -135,7 +162,7 @@
       for (let c = 0; c < 8; c++) {
         const v = row[c];
         if (v !== 0) {
-          const i = (r * 8 + c) * 5 + (v + 2);
+          const i = zi(r, c, v);
           lo ^= ZLO[i];
           hi ^= ZHI[i];
         }
@@ -166,15 +193,14 @@
     return score; // positive = good for red
   }
 
-  function negamax(bd, side, depth, alpha, beta) {
+  function negamax(bd, side, depth, alpha, beta, lo, hi) {
     if (performance.now() > deadline) throw TIMEOUT;
     const { moves, forced } = genMoves(bd, side);
     if (moves.length === 0) return -50000 - depth; // no moves = loss (prefer later losses)
     if (depth <= 0 && !forced) return side * evaluate(bd); // quiescence: keep resolving captures
 
-    const key = zobrist(bd);
-    const ent = TT.get(key.lo);
-    if (ent && ent.hi === key.hi && ent.side === side && ent.depth >= depth) {
+    const ent = TT.get(lo);
+    if (ent && ent.hi === hi && ent.side === side && ent.depth >= depth) {
       // Win/loss scores encode distance-to-mate as remaining depth, so an entry
       // written at a deeper search must be re-based to this node's depth —
       // otherwise "loses in 2" and "loses in 4" stop being distinguishable.
@@ -202,7 +228,7 @@
     let bestMove = null;
     for (const mv of order) {
       const u = applyMove(bd, mv);
-      const v = -negamax(bd, -side, depth - 1, -beta, -alpha);
+      const v = -negamax(bd, -side, depth - 1, -beta, -alpha, lo ^ u.zlo, hi ^ u.zhi);
       undoMove(bd, u);
       if (v > best) { best = v; bestMove = mv.path; }
       if (best > alpha) alpha = best;
@@ -210,7 +236,7 @@
     }
     const flag = best <= a0 ? 2 : best >= beta ? 1 : 0; // UPPER / LOWER / EXACT
     if (TT.size > TT_LIMIT) TT.clear();
-    TT.set(key.lo, { hi: key.hi, side, depth, score: best, flag, move: bestMove });
+    TT.set(lo, { hi, side, depth, score: best, flag, move: bestMove });
     return best;
   }
 
@@ -231,13 +257,14 @@
       return m;
     }
     let scored = moves.map((m) => ({ m, score: 0 }));
+    const root = zobrist(bd); // the one full hash; children XOR in their own delta
     for (let d = 2; d <= maxDepth; d++) {
       const prev = scored.map((e) => ({ m: e.m, score: e.score }));
       try {
         let a = -Infinity;
         for (const e of scored) {
           const u = applyMove(bd, e.m);
-          e.score = -negamax(bd, -side, d - 1, -Infinity, -a);
+          e.score = -negamax(bd, -side, d - 1, -Infinity, -a, root.lo ^ u.zlo, root.hi ^ u.zhi);
           undoMove(bd, u);
           if (e.score > a) a = e.score;
         }

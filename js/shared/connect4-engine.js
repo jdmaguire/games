@@ -41,7 +41,11 @@
   ];
 
   // ---------- Rules ----------
-  const DIRS = [[0, 1], [1, 0], [1, 1], [1, -1]];
+  // The four line directions, held as two flat arrays rather than an array of
+  // pairs: `for (const [dr, dc] of DIRS)` destructures on every step of the
+  // hottest loop in the repo, and the pair form tempts you into writing
+  // `for (const s of [1, -1])`, which allocates.
+  const DR = [0, 1, 1, 1], DC = [1, 0, 1, -1];
 
   function landingRow(bd, col) {
     for (let r = ROWS - 1; r >= 0; r--) if (bd[r][col] === 0) return r;
@@ -62,15 +66,16 @@
 
   function undoMove(bd, col, row) { bd[row][col] = 0; }
 
-  // Allocation-free check used in the hot search path
+  // Allocation-free check used in the hot search path — genuinely so: the two
+  // rays are written out rather than looped over a [1, -1] literal.
   function isWinAt(bd, r, c) {
     const side = bd[r][c];
-    for (const [dr, dc] of DIRS) {
-      let n = 1;
-      for (const s of [1, -1]) {
-        let rr = r + dr * s, cc = c + dc * s;
-        while (rr >= 0 && rr < ROWS && cc >= 0 && cc < COLS && bd[rr][cc] === side) { n++; rr += dr * s; cc += dc * s; }
-      }
+    for (let d = 0; d < 4; d++) {
+      const dr = DR[d], dc = DC[d];
+      let n = 1, rr = r + dr, cc = c + dc;
+      while (rr >= 0 && rr < ROWS && cc >= 0 && cc < COLS && bd[rr][cc] === side) { n++; rr += dr; cc += dc; }
+      rr = r - dr; cc = c - dc;
+      while (rr >= 0 && rr < ROWS && cc >= 0 && cc < COLS && bd[rr][cc] === side) { n++; rr -= dr; cc -= dc; }
       if (n >= 4) return true;
     }
     return false;
@@ -80,9 +85,10 @@
   function winLine(bd, r, c) {
     const side = bd[r][c];
     if (side === 0) return null;
-    for (const [dr, dc] of DIRS) {
+    for (let d = 0; d < 4; d++) {
+      const dr = DR[d], dc = DC[d];
       const line = [[r, c]];
-      for (const s of [1, -1]) {
+      for (let s = 1; s >= -1; s -= 2) {
         let rr = r + dr * s, cc = c + dc * s;
         while (rr >= 0 && rr < ROWS && cc >= 0 && cc < COLS && bd[rr][cc] === side) { line.push([rr, cc]); rr += dr * s; cc += dc * s; }
       }
@@ -103,6 +109,24 @@
     return out;
   }
 
+  // The 69 four-cell windows that fit on the board, flattened to r,c pairs once
+  // at load. `evaluate` then walks a flat array instead of testing 168 candidate
+  // windows for whether they run off the edge, every single time it is called.
+  const WINDOWS = (() => {
+    const out = [];
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        for (let d = 0; d < 4; d++) {
+          const dr = DR[d], dc = DC[d];
+          const r3 = r + 3 * dr, c3 = c + 3 * dc;
+          if (r3 < 0 || r3 >= ROWS || c3 < 0 || c3 >= COLS) continue;
+          for (let i = 0; i < 4; i++) out.push(r + i * dr, c + i * dc);
+        }
+      }
+    }
+    return new Int8Array(out);
+  })();
+
   // Every 4-cell window that only one side occupies is scored: a three with a
   // gap is a live threat, a two is a lean; mixed windows are dead. Plus a small
   // bonus for owning the centre column, which crosses the most windows.
@@ -116,23 +140,15 @@
   function evaluate(bd) {
     let score = 0;
     for (let r = 0; r < ROWS; r++) score += bd[r][3] * 5;
-    for (let r = 0; r < ROWS; r++) {
-      for (let c = 0; c < COLS; c++) {
-        for (const [dr, dc] of DIRS) {
-          const r3 = r + 3 * dr, c3 = c + 3 * dc;
-          if (r3 < 0 || r3 >= ROWS || c3 < 0 || c3 >= COLS) continue;
-          let sum = 0, count = 0;
-          for (let i = 0; i < 4; i++) {
-            const v = bd[r + i * dr][c + i * dc];
-            sum += v;
-            if (v !== 0) count++;
-          }
-          if (Math.abs(sum) !== count) continue; // both sides present — dead window
-          if (count === 3) score += sum > 0 ? 50 : -50;
-          else if (count === 2) score += sum > 0 ? 10 : -10;
-          else if (count === 1) score += sum;
-        }
-      }
+    for (let w = 0; w < WINDOWS.length; w += 8) {
+      const v0 = bd[WINDOWS[w]][WINDOWS[w + 1]], v1 = bd[WINDOWS[w + 2]][WINDOWS[w + 3]];
+      const v2 = bd[WINDOWS[w + 4]][WINDOWS[w + 5]], v3 = bd[WINDOWS[w + 6]][WINDOWS[w + 7]];
+      const sum = v0 + v1 + v2 + v3;
+      const count = (v0 !== 0) + (v1 !== 0) + (v2 !== 0) + (v3 !== 0);
+      if (sum !== count && sum !== -count) continue; // both sides present — dead window
+      if (count === 3) score += sum > 0 ? 50 : -50;
+      else if (count === 2) score += sum > 0 ? 10 : -10;
+      else if (count === 1) score += sum;
     }
     return score; // positive = good for red
   }
@@ -159,6 +175,10 @@
   const ZLO = zTable(0x9E3779B9);
   const ZHI = zTable(0x1F2E3D4C);
 
+  // Full recompute — only ever needed once, for the root. Every node below it
+  // gets its key by XORing in the one disc that changed (`zAt`), which is the
+  // whole point of a Zobrist hash and is why the key is threaded through
+  // `negamax` as two plain numbers rather than rebuilt from the board.
   function zobrist(bd) {
     let lo = 0, hi = 0;
     for (let r = 0; r < ROWS; r++) {
@@ -175,7 +195,9 @@
     return { lo, hi };
   }
 
-  function negamax(bd, side, depth, alpha, beta) {
+  const zAt = (r, c, side) => (r * COLS + c) * 3 + (side + 1);
+
+  function negamax(bd, side, depth, alpha, beta, lo, hi) {
     if (performance.now() > deadline) throw TIMEOUT;
     const moves = genMoves(bd);
     if (moves.length === 0) return 0; // board full = draw
@@ -189,9 +211,8 @@
     }
     if (depth <= 0) return side * evaluate(bd);
 
-    const key = zobrist(bd);
-    const ent = TT.get(key.lo);
-    if (ent && ent.hi === key.hi && ent.side === side && ent.depth >= depth) {
+    const ent = TT.get(lo);
+    if (ent && ent.hi === hi && ent.side === side && ent.depth >= depth) {
       // Win/loss scores encode distance-to-mate as remaining depth, so an entry
       // written at a deeper search must be re-based to this node's depth —
       // otherwise "loses in 2" and "loses in 4" stop being distinguishable.
@@ -219,7 +240,8 @@
     let bestMove = null;
     for (const c of order) {
       const r = applyMove(bd, c, side);
-      const v = -negamax(bd, -side, depth - 1, -beta, -alpha);
+      const z = zAt(r, c, side);
+      const v = -negamax(bd, -side, depth - 1, -beta, -alpha, lo ^ ZLO[z], hi ^ ZHI[z]);
       undoMove(bd, c, r);
       if (v > best) { best = v; bestMove = c; }
       if (best > alpha) alpha = best;
@@ -227,7 +249,7 @@
     }
     const flag = best <= a0 ? 2 : best >= beta ? 1 : 0; // UPPER / LOWER / EXACT
     if (TT.size > TT_LIMIT) TT.clear();
-    TT.set(key.lo, { hi: key.hi, side, depth, score: best, flag, move: bestMove });
+    TT.set(lo, { hi, side, depth, score: best, flag, move: bestMove });
     return best;
   }
 
@@ -246,14 +268,17 @@
       return finish(cols[Math.floor(Math.random() * cols.length)], side * evaluate(bd));
     }
     let scored = cols.map((col) => ({ col, score: 0 }));
+    const root = zobrist(bd); // the one full hash; children XOR in their own disc
     for (let d = 2; d <= lvl.depth; d++) {
       const prev = scored.map((e) => ({ col: e.col, score: e.score }));
       try {
         let a = -Infinity;
         for (const e of scored) {
           const r = applyMove(bd, e.col, side);
+          const z = zAt(r, e.col, side);
           // A move that wins right now outranks any deeper find
-          e.score = isWinAt(bd, r, e.col) ? 1000000 : -negamax(bd, -side, d - 1, -Infinity, -a);
+          e.score = isWinAt(bd, r, e.col) ? 1000000
+            : -negamax(bd, -side, d - 1, -Infinity, -a, root.lo ^ ZLO[z], root.hi ^ ZHI[z]);
           undoMove(bd, e.col, r);
           if (e.score > a) a = e.score;
         }
