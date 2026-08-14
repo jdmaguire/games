@@ -10,6 +10,7 @@
   const DRAW_PLIES = 80; // plies without a capture or man move -> draw
 
   const boardEl = document.getElementById("board");
+  const wrapEl = document.getElementById("wrap");
   const statusEl = document.getElementById("status");
   const overlay = document.getElementById("overlay");
   const ovMsg = document.getElementById("ov-msg");
@@ -63,6 +64,7 @@
   const sfx = {
     land:    () => { thud(0.03, 0.15); beep(160, 110, 0.07, "sine", 0.3); },
     capture: () => { thud(0.07, 0.25); beep(110, 60, 0.11, "square", 0.16); },
+    pick:    () => beep(520, 380, 0.05, "sine", 0.09), // the robot's hand closing on a piece
     promote: () => { beep(523, null, 0.12, "triangle", 0.2); beep(659, null, 0.12, "triangle", 0.2, 0.09); beep(784, null, 0.22, "triangle", 0.22, 0.18); },
     victory: () => {
       const run = [[523, 0], [659, 0.14], [784, 0.28], [1047, 0.42], [784, 0.62], [1047, 0.76]];
@@ -211,6 +213,8 @@
   }
 
   // ---------- Move animation ----------
+  const RobotHand = window.RobotHand; // the engine's hand (js/shared/robot-hand.js)
+
   function flyPiece(fromEl, toEl, html, done, dur) {
     const br = boardEl.getBoundingClientRect();
     const a = fromEl.getBoundingClientRect();
@@ -484,27 +488,30 @@
     });
   }
 
-  // Play out the AI's move one hop at a time so multi-jumps read clearly
+  // Play out the AI's move with the robot's hand (js/shared/robot-hand.js): it
+  // picks the piece up, carries it through every hop — so multi-jumps still read
+  // one capture at a time — and sets it down at the end.
   function animateAiMove(mv, pieceBefore, done) {
-    let i = 0;
-    const hop = () => {
-      const [r0, c0] = mv.path[i];
-      const [r1, c1] = mv.path[i + 1];
-      const caps = mv.caps[i] ? [mv.caps[i]] : [];
-      const fromEl = cellMap[r0 * 8 + c0];
-      flyPiece(fromEl, cellMap[r1 * 8 + c1], fromEl.innerHTML, () => {
-        applyMove(board, { path: [[r0, c0], [r1, c1]], caps });
-        const crowned = isMan(pieceBefore) && Math.abs(board[r1][c1]) === 2;
+    const fromEl = cellMap[mv.path[0][0] * 8 + mv.path[0][1]];
+    const [lr, lc] = mv.path[mv.path.length - 1];
+    RobotHand.carry(wrapEl, mv.path.map(([r, c]) => cellMap[r * 8 + c]), fromEl.innerHTML, {
+      onGrab: () => { fromEl.innerHTML = ""; sfx.pick(); },
+      onHop: (i) => {
+        const caps = mv.caps[i - 1] ? [mv.caps[i - 1]] : [];
+        applyMove(board, { path: [mv.path[i - 1], mv.path[i]], caps });
         render();
-        if (crowned) sfx.promote();
-        else if (caps.length) sfx.capture();
+        // The board now has the piece on this square, but the hand is still
+        // holding it — blank the square so it isn't drawn twice.
+        cellMap[mv.path[i][0] * 8 + mv.path[i][1]].innerHTML = "";
+        if (caps.length) sfx.capture();
+      },
+      onPlace: () => {
+        render(); // the piece is really down now, crown and all
+        if (isMan(pieceBefore) && Math.abs(board[lr][lc]) === 2) sfx.promote();
         else sfx.land();
-        i++;
-        if (i + 1 < mv.path.length) setTimeout(hop, 90);
-        else done();
-      }, 200);
-    };
-    hop();
+        done();
+      },
+    });
   }
 
   function endGame(winner) {
@@ -531,6 +538,7 @@
   function startGame() {
     clearTimeout(endTimer);
     hideBanner();
+    RobotHand.clear(); // a hand still mid-move belongs to the game being replaced
     board = newBoard();
     playerSide = prefs.random ? (Math.random() < 0.5 ? RED : BLK) : prefs.side;
     aiSide = -playerSide;

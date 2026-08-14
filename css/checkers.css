@@ -81,6 +81,41 @@
     transition: transform 0.2s ease;
     will-change: transform;
   }
+  /* The computer's hand (js/shared/robot-hand.js): reaches down over the piece,
+     closes around it, carries it through every hop of a jump, then opens again.
+     It lives in #wrap rather than #board so reaching in from above isn't clipped. */
+  .hand {
+    position: absolute;
+    z-index: 4;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.16s ease;
+    will-change: transform, opacity;
+  }
+  .hand.in { opacity: 1; }
+  .hand .held {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transform: scale(1.12); /* lifted off the board, like a dragged piece */
+    filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.5));
+  }
+  .hand .mitt {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    font-size: calc(var(--board) / 8 * 0.8);
+    line-height: 1;
+    transform: translate(-50%, -92%) rotate(180deg); /* reaching down from above */
+    transition: transform 0.19s ease;
+    filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.5));
+  }
+  .hand.in .mitt { transform: translate(-50%, -62%) rotate(180deg); }
   .sq { position: relative; display: flex; align-items: center; justify-content: center; }
   .sq.light { background: var(--light-sq); }
   .sq.dark { background: var(--dark-sq); cursor: pointer; }

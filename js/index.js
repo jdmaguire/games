@@ -31,7 +31,7 @@
   try {
     const p = JSON.parse(localStorage.getItem("connect4-prefs"));
     if (p && typeof p.level === "number") {
-      document.getElementById("connect4-stat").textContent = "Engine level " + (p.level + 1) + " of 10";
+      document.getElementById("connect4-stat").textContent = "Engine level " + (p.level + 1) + " of 16";
     }
   } catch (e) { /* private browsing */ }
   try {

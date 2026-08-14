@@ -24,11 +24,11 @@ you are changing. Markup, styling, and logic are three separate reads now.
 | Game-select menu | `index.html` (~111) | `css/index.css` (111) | `js/index.js` (59) |
 | Snake | `snake.html` (~56) | `css/snake.css` (76) | `js/snake.js` (309) |
 | Sockbot Showdown | `robot.html` (~60) | `css/robot.css` (107) | `js/robot.js` (**1656**) |
-| Chess | `chess.html` (~89) | `css/chess.css` (217) | `js/chess.js` (747) |
-| Checkers | `checkers.html` (~89) | `css/checkers.css` (213) | `js/checkers.js` (669) |
+| Chess | `chess.html` (~90) | `css/chess.css` (254) | `js/chess.js` (760) |
+| Checkers | `checkers.html` (~90) | `css/checkers.css` (248) | `js/checkers.js` (677) |
 | Breakout | `breakout.html` (~61) | `css/breakout.css` (77) | `js/breakout.js` (462) |
 | Minesweeper | `minesweeper.html` (~68) | `css/minesweeper.css` (120) | `js/minesweeper.js` (617) |
-| Connect Four | `connect4.html` (~92) | `css/connect4.css` (260) | `js/connect4.js` (526) |
+| Connect Four | `connect4.html` (~92) | `css/connect4.css` (260) | `js/connect4.js` (596) |
 
 Shared, loaded by the pages that need them:
 
@@ -36,8 +36,9 @@ Shared, loaded by the pages that need them:
 | --- | --- | --- |
 | `js/shared/audio.js` | 58 | WebAudio synth: `window.GameAudio` = `{ ensureAudio, beep, thud }`. |
 | `js/shared/celebrate.js` | 74 | `window.GameCelebrate` = `{ showBanner, hideBanner, confetti }`. |
-| `js/shared/checkers-engine.js` | 270 | Checkers rules + negamax + transposition table. Dual-purpose: loaded as a classic script (`window.CheckersEngine` = `{ RED, BLK, LEVELS, genMoves, applyMove, undoMove, sideOf, isMan, aiPickMove }`) and spawned as a Worker (`askEngine`). One TT shared by eval + AI search. |
-| `js/shared/connect4-engine.js` | 259 | Connect Four rules + negamax + transposition table. Same dual-purpose pattern: classic script (`window.Connect4Engine` = `{ RED, YEL, ROWS, COLS, LEVELS, genMoves, landingRow, applyMove, undoMove, isWinAt, winLine, aiPickMove }`) and Worker with the same `{ id, board, side, level, ms }` protocol. |
+| `js/shared/robot-hand.js` | 106 | `window.RobotHand` = `{ carry, clear }`. The computer's hand for chess & checkers: reaches down, closes on the piece, carries it through every hop of a move, sets it down. Loaded by `chess.html` and `checkers.html`. |
+| `js/shared/checkers-engine.js` | 278 | Checkers rules + negamax + transposition table. Dual-purpose: loaded as a classic script (`window.CheckersEngine` = `{ RED, BLK, LEVELS, genMoves, applyMove, undoMove, sideOf, isMan, aiPickMove }`) and spawned as a Worker (`askEngine`). One TT shared by eval + AI search. |
+| `js/shared/connect4-engine.js` | 277 | Connect Four rules + negamax + transposition table. Same dual-purpose pattern: classic script (`window.Connect4Engine` = `{ RED, YEL, ROWS, COLS, LEVELS, genMoves, landingRow, applyMove, undoMove, isWinAt, winLine, aiPickMove }`) and Worker with the same `{ id, board, side, level, ms }` protocol. |
 
 Other: `readme.md` (player blurb), `robots.txt` + `sitemap.xml` (SEO, at repo root), `docs/token-notes.md` (what this repo costs to work in
 and what is still worth splitting), `docs/claude-settings.json` (copy-in settings),
@@ -103,12 +104,15 @@ somewhere around 18k tokens; a single section costs a few hundred. See
   Input: keyboard · Input: touch buttons · Boot
 - **`js/chess.js`** — Preferences · Audio · Win celebration · Engine (Stockfish) ·
   Game state · Board rendering · Material counter · Player input · Drag to move ·
-  Move animation · Engine turn · Game end / flow · Setup UI
+  Move animation · Engine turn · Game end / flow · Setup UI. The engine's moves are
+  played by the shared robot hand (`js/shared/robot-hand.js`); the player's own
+  moves just fly across.
 - **`js/checkers.js`** — Preferences · Audio · Win celebration · Engine worker ·
   Live evaluation · Game state · Board rendering · Move animation · Material
   counter · Turn flow · Drag to move · Setup UI. Rules + negamax + the
   transposition table live in `js/shared/checkers-engine.js` (run as a Worker;
-  degraded to a sync fallback when workers are blocked, e.g. `file://`).
+  degraded to a sync fallback when workers are blocked, e.g. `file://`). The AI's
+  move is carried by the shared robot hand, one hop per jump.
 - **`js/breakout.js`** — Tuning · Audio · State · Sizing · Game setup · Physics ·
   Render · Main loop · Input: keyboard · Input: touch · Input: mouse · Boot.
   Gameplay runs in a fixed 100 × 140 logical playfield; `scale` is the only
@@ -125,7 +129,10 @@ somewhere around 18k tokens; a single section costs a few hundred. See
   negamax + the transposition table live in `js/shared/connect4-engine.js` (run
   as a Worker, same file:// sync fallback as checkers). The board is 7×7 units:
   the top row is an open staging lane discs fall through; the AI's move plays out
-  as an emoji hand that glides over its column and opens.
+  as an emoji hand that comes out while the engine searches, wavers over the
+  columns as if undecided, then glides to its choice and opens. `obviousMove()`
+  skips all of that when someone is one disc from four in a row — no wavering, no
+  minimum think, and the engine gets a 400ms budget, since the reply is forced.
 
 ## Conventions
 

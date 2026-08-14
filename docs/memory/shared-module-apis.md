@@ -1,6 +1,6 @@
 ---
 name: shared-module-apis
-description: Exact signatures and behavior of window.GameAudio, window.GameCelebrate, window.CheckersEngine, and window.Connect4Engine so games can call them without reading js/shared/
+description: Exact signatures and behavior of window.GameAudio, window.GameCelebrate, window.RobotHand, window.CheckersEngine, and window.Connect4Engine so games can call them without reading js/shared/
 metadata: 
   node_type: memory
   type: project
@@ -8,7 +8,7 @@ metadata:
   modified: 2026-08-12T00:00:00.000Z
 ---
 
-Exact APIs of the shared modules (as of 2026-08-13), so callers never need to re-read `js/shared/audio.js`, `js/shared/celebrate.js`, `js/shared/checkers-engine.js`, or `js/shared/connect4-engine.js`:
+Exact APIs of the shared modules (as of 2026-08-13), so callers never need to re-read `js/shared/audio.js`, `js/shared/celebrate.js`, `js/shared/robot-hand.js`, `js/shared/checkers-engine.js`, or `js/shared/connect4-engine.js`:
 
 **`window.GameAudio`** (js/shared/audio.js):
 - `ensureAudio()` — lazily creates/resumes the AudioContext; must be called from a real user gesture (iOS). Safe to call repeatedly.
@@ -22,7 +22,14 @@ Exact APIs of the shared modules (as of 2026-08-13), so callers never need to re
 - `hideBanner()`.
 - `confetti(durMs)` — throwaway full-screen fixed canvas (z-index 50, pointer-events none), 160 pieces, fades in last 600ms, removes itself.
 
-Both load as classic scripts before each game's script; this also works for the module `js/chess.js` because module scripts are deferred. See [[localstorage-schemas]] and [[game-engine-internals]] for the other cached codebase facts.
+**`window.RobotHand`** (js/shared/robot-hand.js) — the computer's hand in chess & checkers:
+- `carry(stage, cells, html, opts)` — plays the whole pick-up → carry → put-down. `stage` must be the board's **wrapper** (`#wrap`), not `#board`, which clips its overflow; `cells` is `[fromEl, toEl, ...]`, one entry per landing square, so a checkers multi-jump is just a longer list; `html` is the piece markup to carry (usually `fromEl.innerHTML`).
+- `opts` = `{ onGrab, onHop(i), onPlace }`. `onGrab` fires when the fist closes — the caller empties the square it came from there; `onHop(i)` fires on each landing (`i` indexes `cells`, so 1 is the first); `onPlace` fires as the fingers open — the caller re-renders there. The hand only borrows the markup: the board still draws itself from its own state.
+- `clear()` — cancels a hand mid-move (removes the element, kills the pending step so its callbacks can't fire into the next game). Both games call it from `startGame`, and chess also resets `animating` there, because a cancelled hand never runs the `onPlace` that would have.
+- Timings are module constants: reach 190ms, grab 150ms, per-hop 110–400ms scaled by distance in squares, 90ms between hops, place 160ms, fade 200ms. Play continues from `onPlace` (~550ms in for a single hop); the fade-out just overlaps the next turn. Markup is `div.hand > (div.held + span.mitt)`, styled per game in `css/chess.css` / `css/checkers.css`.
+- Connect Four is NOT a caller — its hand hovers over a column and drops a disc, and lives in `js/connect4.js` (see [[game-engine-internals]]).
+
+All of these load as classic scripts before each game's script; this also works for the module `js/chess.js` because module scripts are deferred. See [[localstorage-schemas]] and [[game-engine-internals]] for the other cached codebase facts.
 
 **`window.CheckersEngine`** (js/shared/checkers-engine.js) — dual-purpose rules + engine:
 - Loaded as a **classic script** on `checkers.html` (before `js/checkers.js`) → exposes `window.CheckersEngine = { RED, BLK, LEVELS, genMoves, applyMove, undoMove, sideOf, isMan, aiPickMove }`. `RED = 1`, `BLK = -1`; `LEVELS[0..9]` is the difficulty table `{ label, depth, ms, noise, random }`.

@@ -18,18 +18,26 @@
 
   // Strength levels: search depth + time budget + score noise. `random` is the
   // chance of just playing any legal move — how the lowest levels stay genuinely
-  // beatable for young kids. High levels are time-capped, not depth-capped.
+  // beatable for young kids, and it fades out gradually so the early levels step
+  // up in small pieces. High levels are time-capped, not depth-capped: iterative
+  // deepening just plays the deepest ply it finished inside the budget.
   const LEVELS = [
-    { label: "1 — first games, great for kids", depth: 1, ms: 60, noise: 200, random: 0.85 },
-    { label: "2 — beginner", depth: 2,  ms: 80,   noise: 80, random: 0.45 },
-    { label: "3 — easy",     depth: 4,  ms: 120,  noise: 40, random: 0.15 },
-    { label: "4 — casual",   depth: 6,  ms: 250,  noise: 20, random: 0 },
-    { label: "5 — tricky",   depth: 8,  ms: 350,  noise: 10, random: 0 },
-    { label: "6 — clever",   depth: 10, ms: 500,  noise: 5,  random: 0 },
-    { label: "7 — sharp",    depth: 12, ms: 700,  noise: 2,  random: 0 },
-    { label: "8 — expert",   depth: 14, ms: 1000, noise: 0,  random: 0 },
-    { label: "9 — master",   depth: 17, ms: 1500, noise: 0,  random: 0 },
-    { label: "10 — good luck!", depth: 21, ms: 2200, noise: 0, random: 0 },
+    { label: "1 — first games, great for kids", depth: 1, ms: 60, noise: 240, random: 0.90 },
+    { label: "2 — still learning", depth: 2,  ms: 80,   noise: 160, random: 0.70 },
+    { label: "3 — beginner",  depth: 2,  ms: 90,   noise: 80,  random: 0.45 },
+    { label: "4 — easy",      depth: 3,  ms: 110,  noise: 60,  random: 0.28 },
+    { label: "5 — learner",   depth: 4,  ms: 130,  noise: 40,  random: 0.15 },
+    { label: "6 — casual",    depth: 5,  ms: 200,  noise: 30,  random: 0.07 },
+    { label: "7 — steady",    depth: 6,  ms: 250,  noise: 20,  random: 0 },
+    { label: "8 — tricky",    depth: 8,  ms: 350,  noise: 12,  random: 0 },
+    { label: "9 — clever",    depth: 10, ms: 500,  noise: 6,   random: 0 },
+    { label: "10 — sharp",    depth: 12, ms: 700,  noise: 3,   random: 0 },
+    { label: "11 — expert",   depth: 14, ms: 1000, noise: 1,   random: 0 },
+    { label: "12 — master",   depth: 17, ms: 1400, noise: 0,   random: 0 },
+    { label: "13 — grandmaster", depth: 21, ms: 2000, noise: 0, random: 0 },
+    { label: "14 — ruthless", depth: 26, ms: 2800, noise: 0,   random: 0 },
+    { label: "15 — merciless", depth: 32, ms: 3500, noise: 0,  random: 0 },
+    { label: "16 — good luck!", depth: 42, ms: 4500, noise: 0, random: 0 }, // 42 = every square: perfect play if it ever finishes
   ];
 
   // ---------- Rules ----------

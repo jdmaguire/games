@@ -2,6 +2,7 @@
   import { Chess } from "../lib/chess-1.4.0.mjs";
 
   const boardEl = document.getElementById("board");
+  const wrapEl = document.getElementById("wrap");
   const statusEl = document.getElementById("status");
   const overlay = document.getElementById("overlay");
   const ovMsg = document.getElementById("ov-msg");
@@ -60,6 +61,7 @@
   const sfx = {
     land:    () => { thud(0.025, 0.12); beep(190, 140, 0.06, "sine", 0.3); },
     capture: () => { thud(0.06, 0.22); beep(130, 70, 0.1, "square", 0.16); },
+    pick:    () => beep(520, 380, 0.05, "sine", 0.09), // the robot's hand closing on a piece
     promote: () => { beep(523, null, 0.12, "triangle", 0.2); beep(659, null, 0.12, "triangle", 0.2, 0.09); beep(784, null, 0.22, "triangle", 0.22, 0.18); },
     victory: () => {
       const run = [[523, 0], [659, 0.14], [784, 0.28], [1047, 0.42], [784, 0.62], [1047, 0.76]];
@@ -440,6 +442,8 @@
   }
 
   // ---------- Move animation ----------
+  const RobotHand = window.RobotHand; // the engine's hand (js/shared/robot-hand.js)
+
   function flyPiece(fromEl, toEl, html, done, dur) {
     const br = boardEl.getBoundingClientRect();
     const a = fromEl.getBoundingClientRect();
@@ -471,29 +475,36 @@
   }
 
   // The move is already applied to `game`; the DOM still shows the old position,
-  // so fly the piece from its old square, then re-render and play the landing sound.
-  function animateMade(made, done, instant) {
+  // so move the piece off its old square, then re-render and play the landing sound.
+  // `byRobot` moves are picked up and set down by the engine's hand
+  // (js/shared/robot-hand.js); the player's own moves just fly, because they made them.
+  function animateMade(made, done, instant, byRobot) {
     animating = true;
     clearHints();
-    if (instant) { // drag-drop: the piece was carried there by hand, just land it
+    const land = () => {
       animating = false;
       render();
       if (made.promotion) sfx.promote();
       else if (made.captured) sfx.capture();
       else sfx.land();
       done();
+    };
+    if (instant) { land(); return; } // drag-drop: the piece was carried there by hand, just land it
+    const rook = rookSquares(made);
+    // Castling flies the rook across on its own, alongside the king
+    const flyRook = () => {
+      if (rook) flyPiece(squares[rook[0]], squares[rook[1]], squares[rook[0]].innerHTML, null, 180);
+    };
+    if (byRobot) {
+      const fromEl = squares[made.from];
+      RobotHand.carry(wrapEl, [fromEl, squares[made.to]], fromEl.innerHTML, {
+        onGrab: () => { fromEl.innerHTML = ""; sfx.pick(); flyRook(); },
+        onPlace: land,
+      });
       return;
     }
-    const rook = rookSquares(made);
-    if (rook) flyPiece(squares[rook[0]], squares[rook[1]], squares[rook[0]].innerHTML, null, 180);
-    flyPiece(squares[made.from], squares[made.to], squares[made.from].innerHTML, () => {
-      animating = false;
-      render();
-      if (made.promotion) sfx.promote();
-      else if (made.captured) sfx.capture();
-      else sfx.land();
-      done();
-    }, 180);
+    flyRook();
+    flyPiece(squares[made.from], squares[made.to], squares[made.from].innerHTML, land, 180);
   }
 
   function playerMove(mv, instant) {
@@ -526,7 +537,7 @@
       saveGame();
       animateMade(made, () => {
         if (!checkGameEnd()) { setStatus("Your move"); startAnalysis(); }
-      });
+      }, false, true);
       return;
     }
     searchTurn = game.turn(); // the engine searches the current position, so its
@@ -543,7 +554,7 @@
     saveGame();
     animateMade(made, () => {
       if (!checkGameEnd()) { setStatus("Your move"); startAnalysis(); }
-    });
+    }, false, true);
   }
 
   // ---------- Game end / flow ----------
@@ -590,6 +601,7 @@
     if (!engineOk) return;
     clearTimeout(endTimer);
     hideBanner();
+    RobotHand.clear(); // a hand still mid-move belongs to the game being replaced
     playerSide = prefs.random ? (Math.random() < 0.5 ? "w" : "b") : prefs.side;
     game = new Chess();
     uciMoves = [];
@@ -597,6 +609,7 @@
     legalTargets = [];
     lastMove = null;
     thinking = false;
+    animating = false;
     gameOver = false;
     overlay.classList.add("hidden");
     evalEl.hidden = !showEval;

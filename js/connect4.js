@@ -6,7 +6,7 @@
   // for the AI's search, so the search never runs on the main thread. The live
   // eval and the AI move share the Worker's transposition table, so no position
   // is ever searched twice.
-  const { RED, YEL, ROWS, COLS, LEVELS, landingRow, winLine, aiPickMove } = window.Connect4Engine;
+  const { RED, YEL, ROWS, COLS, LEVELS, landingRow, isWinAt, winLine, aiPickMove } = window.Connect4Engine;
 
   const boardEl = document.getElementById("board");
   const discsEl = document.getElementById("discs");
@@ -127,7 +127,7 @@
   // in the worker on the player's turn. It shares the engine's exact code path,
   // so the number matches what the AI plays — and it warms the transposition
   // table the AI's very next search reuses.
-  const EVAL_LEVEL = 8; // LEVELS[8]: depth 14 — plenty to read the position
+  const EVAL_LEVEL = 10; // LEVELS[10]: depth 14 — plenty to read the position
   const EVAL_MS = 300;  // short eval budget so a pending eval never delays the AI's move
   let evalScore = null; // side-to-move-relative; the eval only runs on the player's
                         // turn, so positive = good for the player
@@ -268,35 +268,94 @@
 
   // ---------- The robot's hand ----------
   // The AI's move plays out as a hand that appears over the middle of the lane
-  // holding its disc, glides across to the chosen column, opens, and lets the
-  // disc fall. Timings are tight on purpose — it should read, not dawdle.
-  function animateAiMove(col, done) {
-    const row = landingRow(board, col);
-    const seq = gameSeq;
-    const slide = Math.min(260, 90 + 40 * Math.abs(col - 3));
+  // holding its disc. While the engine searches it wavers left and right over
+  // the columns — visibly making up its mind — then commits to the chosen one,
+  // opens, and lets the disc fall. Timings are tight on purpose: it should read
+  // as thinking, not dawdling.
+  const HAND_IN_MS = 130;      // fade/reach in
+  const HAND_MIN_THINK = 700;  // waver at least this long, even when level 1 answers instantly
+  let handHop = null;          // pending waver timer
+
+  const handSlideMs = (from, to) => Math.min(260, 90 + 40 * Math.abs(from - to));
+
+  function dropHand() {
+    clearTimeout(handHop);
+    handHop = null;
+    if (hand) { hand.remove(); hand = null; }
+  }
+
+  function showHand() {
     const h = document.createElement("div");
     h.className = "hand";
     h.style.left = (3 * 100 / COLS) + "%";
+    h.dataset.col = "3";
     h.innerHTML = `<div class="pc ${aiSide === RED ? "red" : "yel"}"></div><span class="mitt">✊</span>`;
     boardEl.appendChild(h);
     hand = h;
     h.style.transition = "opacity 130ms ease, transform 130ms ease";
     requestAnimationFrame(() => requestAnimationFrame(() => h.classList.add("in")));
-    setTimeout(() => { // glide over the chosen column (keep the fade-in props transitioning too)
-      h.style.transition = `left ${slide}ms ease-in-out, opacity 130ms ease, transform 130ms ease`;
-      h.style.left = (col * 100 / COLS) + "%";
-    }, 150);
-    setTimeout(() => { // open the hand and let the disc go
-      if (seq !== gameSeq) { h.remove(); if (hand === h) hand = null; return; }
+    return h;
+  }
+
+  // Glide over `col`, keeping the fade-in props transitioning too
+  function moveHand(h, col, ms) {
+    h.style.transition = `left ${ms}ms ease-in-out, opacity 130ms ease, transform 130ms ease`;
+    h.style.left = (col * 100 / COLS) + "%";
+    h.dataset.col = String(col);
+  }
+
+  // Is anyone one disc from four in a row? Then the reply picks itself — there is
+  // nothing to weigh up, so the hand skips the wavering and goes straight there.
+  function obviousMove() {
+    for (let c = 0; c < COLS; c++) {
+      const r = landingRow(board, c);
+      if (r < 0) continue;
+      for (const side of [aiSide, playerSide]) {
+        board[r][c] = side;
+        const win = isWinAt(board, r, c);
+        board[r][c] = 0;
+        if (win) return true;
+      }
+    }
+    return false;
+  }
+
+  // Hover over a nearby column that could still take a disc, pause, think again
+  function waverHand(h) {
+    if (h !== hand) return; // this hand has been dropped
+    const cur = +h.dataset.col;
+    const open = [];
+    for (let c = 0; c < COLS; c++) if (c !== cur && board[0][c] === 0) open.push(c);
+    if (!open.length) return; // one column left — nothing to dither over
+    const near = open.filter((c) => Math.abs(c - cur) <= 3);
+    const pool = near.length ? near : open;
+    const col = pool[Math.floor(Math.random() * pool.length)];
+    const ms = handSlideMs(cur, col);
+    moveHand(h, col, ms);
+    handHop = setTimeout(() => waverHand(h), ms + 110 + Math.random() * 180);
+  }
+
+  // Stop wavering, settle over the chosen column, then open and let the disc go
+  function animateAiMove(col, done) {
+    const h = hand || showHand(); // normally already out and wavering
+    clearTimeout(handHop);
+    handHop = null;
+    const row = landingRow(board, col);
+    const seq = gameSeq;
+    const slide = handSlideMs(+h.dataset.col, col);
+    moveHand(h, col, slide);
+    setTimeout(() => {
+      if (seq !== gameSeq || hand !== h) { h.remove(); if (hand === h) hand = null; return; }
       h.querySelector(".mitt").textContent = "🖐";
       h.querySelector(".pc").style.visibility = "hidden"; // the falling copy takes over
       h.style.transition = "opacity 200ms ease, transform 200ms ease";
       h.classList.remove("in");
       h.classList.add("out");
       sfx.release();
-      setTimeout(() => { h.remove(); if (hand === h) hand = null; }, 240);
+      hand = null; // it is on its way out; nothing else should steer it
+      setTimeout(() => h.remove(), 240);
       dropDisc(col, row, aiSide, () => done(row));
-    }, 150 + slide + 110);
+    }, slide + 110);
   }
 
   // ---------- Turn flow ----------
@@ -351,10 +410,21 @@
     setStatus("Thinking…");
     render();
     const seq = gameSeq;
-    askEngine(aiSide, prefs.level).then((mv) => {
-      if (seq !== gameSeq) return; // a new game started while the engine searched
-      if (!mv) return endGame(0);  // no legal move = the board is full
-      animateAiMove(mv.col, (row) => afterDrop(row, mv.col, aiSide));
+    // The hand comes out first and wavers while the search runs, so even the
+    // instant low levels look like they weighed it up. A forced move gets none of
+    // that: no wavering, no minimum think, and a short search budget too, because
+    // with four in a row on offer the reply is the same at any depth.
+    const forced = obviousMove();
+    const h = showHand();
+    const started = performance.now();
+    if (!forced) handHop = setTimeout(() => waverHand(h), HAND_IN_MS + 120);
+    askEngine(aiSide, prefs.level, forced ? Math.min(LEVELS[prefs.level].ms, 400) : undefined).then((mv) => {
+      if (seq !== gameSeq) return;   // a new game started while the engine searched
+      if (!mv) { dropHand(); return endGame(0); } // no legal move = the board is full
+      const commit = () => animateAiMove(mv.col, (row) => afterDrop(row, mv.col, aiSide));
+      const settle = forced ? 0 : Math.max(0, HAND_MIN_THINK - (performance.now() - started));
+      if (settle) setTimeout(() => { if (seq === gameSeq) commit(); }, settle);
+      else commit();
     });
   }
 
@@ -384,7 +454,7 @@
   function startGame() {
     clearTimeout(endTimer);
     hideBanner();
-    if (hand) { hand.remove(); hand = null; }
+    dropHand(); // a hand still deciding belongs to the game being replaced
     for (const el of discsEl.querySelectorAll(".fall")) el.remove();
     board = newBoard();
     playerSide = prefs.random ? (Math.random() < 0.5 ? RED : YEL) : prefs.side;
