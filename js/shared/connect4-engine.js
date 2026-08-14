@@ -106,6 +106,13 @@
   // Every 4-cell window that only one side occupies is scored: a three with a
   // gap is a live threat, a two is a lean; mixed windows are dead. Plus a small
   // bonus for owning the centre column, which crosses the most windows.
+  //
+  // This is deliberately blind to gravity: a three whose gap is buried five rows
+  // up scores the same 50 as one that can be finished this turn. That looks like
+  // an obvious thing to fix, and it isn't — weighting the gap by playability,
+  // and separately penalising live opponent threats at the leaf, were both
+  // measured against a depth-11 oracle and both came out inside noise of 50%.
+  // See docs/memory/game-engine-internals.md before trying it again.
   function evaluate(bd) {
     let score = 0;
     for (let r = 0; r < ROWS; r++) score += bd[r][3] * 5;
