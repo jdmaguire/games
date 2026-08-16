@@ -29,7 +29,7 @@ you are changing. Markup, styling, and logic are three separate reads now.
 | Breakout | `breakout.html` (~61) | `css/breakout.css` (77) | `js/breakout.js` (462) |
 | Minesweeper | `minesweeper.html` (~68) | `css/minesweeper.css` (120) | `js/minesweeper.js` (617) |
 | Connect Four | `connect4.html` (~92) | `css/connect4.css` (260) | `js/connect4.js` (596) |
-| Chinese Checkers | `chinese-checkers.html` (~75) | `css/chinese-checkers.css` (246) | `js/chinese-checkers.js` (598) |
+| Chinese Checkers | `chinese-checkers.html` (~80) | `css/chinese-checkers.css` (257) | `js/chinese-checkers.js` (635) |
 
 Shared, loaded by the pages that need them:
 
@@ -40,11 +40,12 @@ Shared, loaded by the pages that need them:
 | `js/shared/robot-hand.js` | 106 | `window.RobotHand` = `{ carry, clear }`. The computer's hand for chess, checkers & chinese checkers: reaches down, closes on the piece, carries it through every hop of a move, sets it down. Loaded by `chess.html`, `checkers.html` and `chinese-checkers.html`. |
 | `js/shared/checkers-engine.js` | 278 | Checkers rules + negamax + transposition table. Dual-purpose: loaded as a classic script (`window.CheckersEngine` = `{ RED, BLK, LEVELS, genMoves, applyMove, undoMove, sideOf, isMan, aiPickMove }`) and spawned as a Worker (`askEngine`). One TT shared by eval + AI search. |
 | `js/shared/connect4-engine.js` | 277 | Connect Four rules + negamax + transposition table. Same dual-purpose pattern: classic script (`window.Connect4Engine` = `{ RED, YEL, ROWS, COLS, LEVELS, genMoves, landingRow, applyMove, undoMove, isWinAt, winLine, aiPickMove }`) and Worker with the same `{ id, board, side, level, ms }` protocol. |
-| `js/shared/chinese-checkers-engine.js` | 389 | Chinese checkers board geometry (121-hole star) + rules + **max-n** search (2-6 players, so no negamax/alpha-beta) + transposition table. Same dual-purpose pattern: classic script (`window.ChineseCheckersEngine` = `{ CELLS, CORNER, TRI, SEATS, LEVELS, targetOf, startBoard, genMoves, applyMove, undoMove, isWin, aiPickMove }`) and Worker with the same `{ id, board, side, level, ms }` protocol. |
+| `js/shared/chinese-checkers-engine.js` | 456 | Chinese checkers board geometry (121-hole star) + rules + **max-n** search (2-6 players, so no negamax/alpha-beta) + transposition table. Same dual-purpose pattern: classic script (`window.ChineseCheckersEngine` = `{ CELLS, CORNER, TRI, SEATS, LEVELS, targetOf, partnerOf, startBoard, genMoves, applyMove, undoMove, isWin, isDone, winnerAfter, aiPickMove }`) and Worker with the checkers protocol plus a `teams` flag: `{ id, board, side, level, ms, teams }`. |
 
 Other: `readme.md` (player blurb), `robots.txt` + `sitemap.xml` (SEO, at repo root), `docs/token-notes.md` (what this repo costs to work in
 and what is still worth splitting), `docs/claude-settings.json` (copy-in settings),
-`docs/memory/` (cached codebase facts — see below).
+`docs/memory/` (cached codebase facts — see below),
+`test/chinese-checkers-engine.test.cjs` (the one runnable test — see Verification).
 
 ## Cached codebase facts — `docs/memory/`
 
@@ -142,7 +143,9 @@ somewhere around 18k tokens; a single section costs a few hundred. See
   Geometry + rules + the max-n search live in
   `js/shared/chinese-checkers-engine.js` (run as a Worker, same file:// sync
   fallback as checkers). The human always plays the bottom corner and moves
-  first; 1-5 AI opponents take the other corners (2/3/4/6 players). The board is
+  first; 1-5 AI opponents take the other corners (2/3/4/6 players; 4 and 6 can
+  play in teams of opposite-corner pairs — the human's partner is the AI at the
+  top). The board is
   121 absolutely-positioned hole divs laid out from cube coordinates, with a
   clip-path star face behind them; hit-testing is nearest-hole, so small holes
   still tap well. Hop chains are picked by destination (no mid-jump state); the
@@ -178,17 +181,23 @@ somewhere around 18k tokens; a single section costs a few hundred. See
 
 ## Verification
 
-There is nothing to run — no tests, no build, no lint. So:
+There is no build and no lint, and only one test file. So:
 
 1. Keep diffs surgical. Prefer the smallest edit that works over a refactor.
 2. Syntax-check standalone JS with `node --check js/<file>.js`.
-3. To try it by hand, serve over HTTP — `python3 -m http.server` from the repo root, then
+3. The chinese-checkers engine has a real test: `node test/chinese-checkers-engine.test.cjs`
+   (geometry invariants, rule edge cases, and full AI self-play at every player
+   count, free-for-all and teams; takes about a minute). Run it after any change
+   to `js/shared/chinese-checkers-engine.js`. It's `.cjs` so a stray
+   `"type": "module"` package.json above the repo can't break it. The other
+   games have nothing to run.
+4. To try it by hand, serve over HTTP — `python3 -m http.server` from the repo root, then
    open <http://localhost:8000>. **`file://` will not work for chess**: the Stockfish
    Web Worker and the `chess-1.4.0.mjs` module import are both blocked there. Checkers,
    Connect Four and Chinese Checkers survive `file://` by degrading to a synchronous
    search on the main thread, but only the real Worker path exercises the
    transposition-table sharing this repo is about.
-4. State in the PR description what you could not verify. Do not claim a game was tested
+5. State in the PR description what you could not verify. Do not claim a game was tested
    when it was not.
 
 ## Scope

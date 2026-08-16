@@ -121,11 +121,54 @@
     return bd;
   }
 
-  // Win = every hole of your target triangle holds one of your marbles. With
-  // 10 marbles and 10 holes that is exactly "moved your last marble across".
+  // Individual win, free-for-all games: your target triangle is completely
+  // full AND at least one marble in it is yours. With no squatters that is
+  // exactly "moved your last marble across"; when the triangle's owner parks
+  // marbles at home, they count as filled for you — the anti-blocking rule,
+  // without which a parked marble makes the incomer's win literally
+  // unreachable. (At the start of a game the target is full of the owner's
+  // ten marbles and none are yours, so nothing fires until they vacate a hole
+  // and you claim it.)
   function isWin(bd, p) {
+    let mine = false;
+    for (const i of TRI[targetOf(p)]) {
+      const v = bd[i];
+      if (v === 0) return false;
+      if (v === p) mine = true;
+    }
+    return mine;
+  }
+
+  // Strictly home: all ten target holes hold p's own marbles. This is the
+  // per-player test in TEAM games — your partner sits opposite, so your
+  // target is *their* home, and counting their yet-to-leave marbles as
+  // squatters would hand out wins for swapping two marbles. Partners
+  // cooperate, so no anti-blocking is needed inside a team (and the
+  // corner-resting rule keeps everyone else out of both corners entirely).
+  function isDone(bd, p) {
     for (const i of TRI[targetOf(p)]) if (bd[i] !== p) return false;
     return true;
+  }
+
+  // The player opposite p: the owner of p's target corner. In a team game
+  // that is p's partner; in a free-for-all it is the one player p could gift
+  // a win to by re-filling their own home.
+  const partnerOf = (p) => targetOf(p) + 1;
+
+  // The winner created by p's move, or 0. After p moves, the only possible
+  // new winner is p themselves or (free-for-all only) the player aiming at
+  // p's home corner — p just re-filled its last hole, and the anti-blocking
+  // rule means that *hands over* the win. Teams win strictly: both partners
+  // fully home; only the mover's own team can complete on the mover's move,
+  // and the returned id is the mover (map it to the team in the caller).
+  function winnerAfter(bd, mv, p, teams) {
+    if (teams) return isDone(bd, p) && isDone(bd, partnerOf(p)) ? p : 0;
+    if (isWin(bd, p)) return p;
+    if (CORNER[mv.to] === p - 1) {
+      const q = partnerOf(p);
+      if (bd.indexOf(q) >= 0 && isWin(bd, q)) return q;
+    }
+    return 0;
   }
 
   // Move generation. A turn is either one step to an adjacent empty hole, or a
@@ -208,6 +251,7 @@
   let deadline = 0;
   let seats = [];   // ascending player ids present in the searched game
   let rootSide = 0; // the player the AI is choosing for (gets the wide move cap)
+  let teamsOn = false; // team game: each mover maximises its team's summed score
   let lvlK = 8, lvlKopp = 3;
 
   const TT = new Map();
@@ -239,6 +283,19 @@
     return { lo, hi };
   }
 
+  // Game over: the winning side's entries spike and every other seat's
+  // craters, so the search chases its own wins, blocks other players' wins
+  // when it can, and never gifts one by re-filling its own home. In a team
+  // game the winner's partner shares the spike. Remaining depth = sooner, so
+  // wins are taken quickly and losses put off.
+  function terminalVec(bd, winner, depth) {
+    const vec = evalAll(bd);
+    const b = 100000 + depth * 100;
+    const pw = teamsOn ? partnerOf(winner) : 0;
+    for (const s of seats) vec[s] += s === winner || s === pw ? b : -b;
+    return vec;
+  }
+
   // Static eval, one score per player: mostly "how close are my marbles to the
   // tip of my target corner" (a forward step ≈ +10, so a 4-hop chain ≈ +40),
   // a small bonus per marble already parked in the target triangle, and a
@@ -264,7 +321,9 @@
     if (depth <= 0) return evalAll(bd);
     const p = seats[si];
     const ent = TT.get(lo);
-    if (ent && ent.hi === hi && ent.side === p && ent.depth >= depth) return ent.vec;
+    // `tm` must match: team and free-for-all searches back up different
+    // terminal values for the same position, and the table outlives games.
+    if (ent && ent.hi === hi && ent.side === p && ent.tm === teamsOn && ent.depth >= depth) return ent.vec;
 
     const moves = genMoves(bd, p);
     const ni = (si + 1) % seats.length;
@@ -281,32 +340,35 @@
     const cap = p === rootSide ? lvlK : lvlKopp;
     if (moves.length > cap) moves.length = cap;
 
-    let best = null, bestVec = null;
+    const pp = teamsOn ? partnerOf(p) : 0; // the mover plays for its team's sum
+    let best = null, bestVec = null, bestSc = -Infinity;
     for (const mv of moves) {
       const v = applyMove(bd, mv);
-      const dlo = ZLO[mv.from * 7 + v] ^ ZLO[mv.to * 7 + v];
-      const dhi = ZHI[mv.from * 7 + v] ^ ZHI[mv.to * 7 + v];
+      const w = winnerAfter(bd, mv, p, teamsOn);
       let vec;
-      if (isWin(bd, p)) {
-        vec = evalAll(bd); // fresh array — safe to bend
-        vec[p] += 100000 + depth * 100; // remaining depth = sooner: prefer quick wins
+      if (w) {
+        vec = terminalVec(bd, w, depth);
       } else {
+        const dlo = ZLO[mv.from * 7 + v] ^ ZLO[mv.to * 7 + v];
+        const dhi = ZHI[mv.from * 7 + v] ^ ZHI[mv.to * 7 + v];
         vec = search(bd, ni, depth - 1, lo ^ dlo, hi ^ dhi);
       }
       undoMove(bd, mv, v);
-      if (bestVec === null || vec[p] > bestVec[p]) { bestVec = vec; best = mv; }
+      const sc = pp ? vec[p] + vec[pp] : vec[p];
+      if (sc > bestSc) { bestSc = sc; bestVec = vec; best = mv; }
     }
     if (TT.size > TT_LIMIT) TT.clear();
-    TT.set(lo, { hi, side: p, depth, vec: bestVec, move: best });
+    TT.set(lo, { hi, side: p, tm: teamsOn, depth, vec: bestVec, move: best });
     return bestVec;
   }
 
   // Search on a private copy: a TIMEOUT thrown mid-search skips undoMove calls,
   // which would leave phantom moves applied to the caller's board.
-  function aiPickMove(bd0, side, level, ms) {
+  function aiPickMove(bd0, side, level, ms, teams) {
     const bd = bd0.slice();
     const lvl = LEVELS[level];
     deadline = performance.now() + (ms || lvl.ms);
+    teamsOn = !!teams;
     seats = [];
     for (let p = 1; p <= 6; p++) if (bd.indexOf(p) >= 0) seats.push(p);
     const si = seats.indexOf(side);
@@ -342,12 +404,16 @@
       try {
         for (const e of scored) {
           const v = applyMove(bd, e.m);
-          if (isWin(bd, side)) {
+          const w = winnerAfter(bd, e.m, side, teamsOn);
+          if (w === side) {
             e.score = 1000000;
+          } else if (w) {
+            e.score = -1000000; // re-filling our own home hands the game away
           } else {
             const dlo = ZLO[e.m.from * 7 + v] ^ ZLO[e.m.to * 7 + v];
             const dhi = ZHI[e.m.from * 7 + v] ^ ZHI[e.m.to * 7 + v];
-            e.score = search(bd, ni, d - 1, root.lo ^ dlo, root.hi ^ dhi)[side];
+            const vec = search(bd, ni, d - 1, root.lo ^ dlo, root.hi ^ dhi);
+            e.score = teamsOn ? vec[side] + vec[partnerOf(side)] : vec[side];
           }
           undoMove(bd, e.m, v);
         }
@@ -370,16 +436,17 @@
 
   const api = {
     CELLS, CORNER, TRI, SEATS, LEVELS,
-    targetOf, startBoard, genMoves, applyMove, undoMove, isWin, aiPickMove,
+    targetOf, partnerOf, startBoard, genMoves, applyMove, undoMove,
+    isWin, isDone, winnerAfter, aiPickMove,
   };
 
   if (typeof window === "undefined") {
-    // Worker context: answer { id, board, side, level, ms } → { id, move },
-    // the same protocol as checkers-engine.js / connect4-engine.js.
+    // Worker context: answer { id, board, side, level, ms, teams } →
+    // { id, move } — the checkers/connect4 protocol plus the teams flag.
     self.onmessage = (e) => {
-      const { id, board, side, level, ms } = e.data;
+      const { id, board, side, level, ms, teams } = e.data;
       let move = null;
-      try { move = aiPickMove(board, side, level, ms); }
+      try { move = aiPickMove(board, side, level, ms, teams); }
       catch (err) { move = null; }
       self.postMessage({ id, move });
     };

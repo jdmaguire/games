@@ -69,6 +69,14 @@
   }
   .chip .home { color: var(--muted); font-weight: 600; font-variant-numeric: tabular-nums; }
   .chip.turn { border-color: var(--accent); }
+  /* Team games: each opposite-corner pair shares a dashed ring */
+  .team {
+    display: flex;
+    gap: 4px;
+    padding: 3px;
+    border: 1px dashed rgba(255, 255, 255, 0.25);
+    border-radius: 999px;
+  }
   #wrap { position: relative; }
   #board {
     position: relative;
@@ -241,6 +249,8 @@
   #overlay .row { display: flex; gap: 10px; width: 100%; max-width: 320px; }
   #overlay .row button.on { border-color: var(--accent); background: #1d3a38; }
   #overlay label { color: var(--muted); font-size: 14px; }
+  #overlay label.opt { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+  #overlay label.opt input { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
   #overlay input[type=range] { width: 100%; max-width: 320px; }
   #lvl-label { font-size: 20px; font-weight: 800; color: var(--accent); }
   #ov-msg { color: var(--muted); font-size: 15px; line-height: 1.5; }

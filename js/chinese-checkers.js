@@ -5,7 +5,7 @@
   // live in js/shared/chinese-checkers-engine.js. It's loaded as a classic
   // script here (for the rules gameplay needs) and spawned as a Worker for the
   // AI's search, so the search never runs on the main thread.
-  const { CELLS, CORNER, TRI, SEATS, LEVELS, targetOf, startBoard, genMoves, applyMove, isWin, aiPickMove } =
+  const { CELLS, CORNER, TRI, SEATS, LEVELS, targetOf, partnerOf, startBoard, genMoves, applyMove, winnerAfter, aiPickMove } =
     window.ChineseCheckersEngine;
 
   const HUMAN = 1; // the human always plays the bottom corner
@@ -24,15 +24,20 @@
   const btnView = document.getElementById("btn-view");
   const playerBtns = { 2: document.getElementById("pl-2"), 3: document.getElementById("pl-3"),
                        4: document.getElementById("pl-4"), 6: document.getElementById("pl-6") };
+  const teamsRow = document.getElementById("teams-row");
+  const teamsOpt = document.getElementById("teams-opt");
   const OV_BLURB = "Race your marbles across the star — step to a neighbouring hole, " +
     "or chain hops over any marbles. You can't stop inside another colour's triangle. " +
     "First to fill the far triangle wins!";
 
   // ---------- Preferences ----------
-  let prefs = { level: 0, players: 2 }; // default to the gentlest setting
+  let prefs = { level: 0, players: 2, teams: false }; // default to the gentlest setting
   try {
     const saved = JSON.parse(localStorage.getItem("chinese-checkers-prefs"));
-    if (saved && typeof saved.level === "number" && LEVELS[saved.level] && SEATS[saved.players]) prefs = saved;
+    if (saved && typeof saved.level === "number" && LEVELS[saved.level] && SEATS[saved.players]) {
+      prefs = saved;
+      prefs.teams = !!prefs.teams;
+    }
   } catch (e) { /* private browsing */ }
   function savePrefs() {
     try { localStorage.setItem("chinese-checkers-prefs", JSON.stringify(prefs)); } catch (e) { /* private browsing */ }
@@ -42,7 +47,7 @@
   function saveGame() {
     try {
       localStorage.setItem("chinese-checkers-game",
-        JSON.stringify({ board, turn: seats[turnIdx], players: seats.length, level: prefs.level, snapshots }));
+        JSON.stringify({ board, turn: seats[turnIdx], players: seats.length, teams, level: prefs.level, snapshots }));
     } catch (e) { /* private browsing */ }
   }
   function clearGameSave() {
@@ -85,14 +90,14 @@
     engineDead = true; // file:// blocks workers — fall back to the sync engine
   }
   function syncSearch(side, level, ms) {
-    try { return aiPickMove(board, side, level, ms); }
+    try { return aiPickMove(board, side, level, ms, teams); }
     catch (e) { return null; }
   }
   function askEngine(side, level, ms) {
     if (!engine || engineDead) return Promise.resolve(syncSearch(side, level, ms));
     const id = ++engineSeq;
     const p = new Promise((resolve) => engineWaiters.set(id, { resolve, side, level, ms }));
-    engine.postMessage({ id, board, side, level, ms });
+    engine.postMessage({ id, board, side, level, ms, teams });
     return p;
   }
   if (engine) {
@@ -110,6 +115,7 @@
 
   // ---------- Game state ----------
   let board, seats, turnIdx, thinking, gameOver;
+  let teams = false;          // this game is opposite-corner pairs (4 or 6 players)
   let started = false;        // a real game has begun (guards the setup preview)
   let animating = false;
   let endTimer = null;
@@ -225,11 +231,19 @@
   }
 
   function renderSeats() {
-    seatsEl.innerHTML = seats.map((p) => {
+    const chip = (p) => {
       const active = started && !gameOver && seats[turnIdx] === p;
       return `<div class="chip${active ? " turn" : ""}"><span class="disc c${p - 1}"></span>` +
         `<span>${p === HUMAN ? "You" : NAMES[p - 1]}</span><span class="home">${countHome(p)}/10</span></div>`;
-    }).join("");
+    };
+    if (teams) {
+      // Partners sit opposite: the first half of the seats each pair with
+      // the seat whose home is their target
+      const pairs = seats.slice(0, seats.length / 2).map((p) => [p, partnerOf(p)]);
+      seatsEl.innerHTML = pairs.map((g) => `<div class="team">${g.map(chip).join("")}</div>`).join("");
+    } else {
+      seatsEl.innerHTML = seats.map(chip).join("");
+    }
   }
 
   // ---------- Move animation ----------
@@ -278,7 +292,7 @@
       lastPath = mv.path.slice();
       render();
       sfx.land();
-      finishPlayerMove();
+      finishPlayerMove(mv);
     };
     clearHints();
     if (instant) { land(); return true; }
@@ -386,12 +400,15 @@
     render();
   }
 
-  function finishPlayerMove() {
+  function finishPlayerMove(mv) {
     if (pendingSnap) snapshots.push(pendingSnap); // this move is now undoable
     pendingSnap = null;
     selected = null;
     activeMoves = [];
-    if (isWin(board, HUMAN)) return endGame(HUMAN);
+    // winnerAfter (engine) covers the anti-blocking hand-over in free-for-all
+    // games and the strict both-partners-home win in team games
+    const w = winnerAfter(board, mv, HUMAN, teams);
+    if (w) return endGame(w);
     advanceTurn();
     render();
     saveGame();
@@ -422,7 +439,8 @@
       lastPath = mv.path.slice();
       animateAiMove(p, mv, () => {
         thinking = false;
-        if (isWin(board, p)) return endGame(p);
+        const w = winnerAfter(board, mv, p, teams);
+        if (w) return endGame(w);
         advanceTurn();
         saveGame();
         nextTurn();
@@ -451,13 +469,17 @@
   function endGame(winner) {
     gameOver = true;
     clearGameSave();
-    const won = winner === HUMAN;
-    const msg = won ? "You win! 🏆" : NAMES[winner - 1] + " wins. 💀";
+    // In a team game the winner id stands for its whole pair
+    const winners = teams ? [winner, partnerOf(winner)] : [winner];
+    const won = winners.includes(HUMAN);
+    const msg = won
+      ? (teams ? "Your team wins! 🏆" : "You win! 🏆")
+      : winners.map((p) => NAMES[p - 1]).join(" & ") + (teams ? " win. 💀" : " wins. 💀");
     setStatus(msg);
     ovMsg.textContent = msg;
     render();
     // Let the result sink in before offering a new game — with a party if they won
-    if (won) celebrate("You win! 🎉");
+    if (won) celebrate(teams ? "Team win! 🎉" : "You win! 🎉");
     clearTimeout(endTimer);
     endTimer = setTimeout(() => {
       hideBanner();
@@ -472,6 +494,7 @@
     RobotHand.clear(); // a hand still mid-move belongs to the game being replaced
     board = startBoard(prefs.players);
     seats = SEATS[prefs.players].slice();
+    teams = prefs.teams && (prefs.players === 4 || prefs.players === 6);
     turnIdx = 0; // the human moves first
     started = true;
     thinking = false;
@@ -516,6 +539,8 @@
 
   function syncPlayersUI() {
     for (const n of [2, 3, 4, 6]) playerBtns[n].classList.toggle("on", prefs.players === n);
+    teamsRow.hidden = prefs.players !== 4 && prefs.players !== 6; // pairs need an even star
+    teamsOpt.checked = prefs.teams;
   }
   function setPlayers(n) {
     prefs.players = n;
@@ -524,11 +549,20 @@
     if (!started) { // preview the seating behind the menu
       board = startBoard(n);
       seats = SEATS[n].slice();
+      teams = prefs.teams && (n === 4 || n === 6);
       turnIdx = 0;
       render();
     }
   }
   for (const n of [2, 3, 4, 6]) playerBtns[n].addEventListener("click", () => setPlayers(n));
+  teamsOpt.addEventListener("change", () => {
+    prefs.teams = teamsOpt.checked;
+    savePrefs();
+    if (!started) { // regroup the seat chips behind the menu
+      teams = prefs.teams && (prefs.players === 4 || prefs.players === 6);
+      render();
+    }
+  });
   syncPlayersUI();
 
   document.getElementById("start").addEventListener("click", () => {
@@ -564,6 +598,7 @@
     if (sv && validBoard(sv.board, sv.players) && SEATS[sv.players].includes(sv.turn)) {
       board = sv.board.slice();
       seats = SEATS[sv.players].slice();
+      teams = sv.teams === true && (sv.players === 4 || sv.players === 6);
       turnIdx = seats.indexOf(sv.turn);
       snapshots = (Array.isArray(sv.snapshots) ? sv.snapshots : []).filter((b) => validBoard(b, sv.players));
       if (typeof sv.level === "number" && LEVELS[sv.level]) {
@@ -572,6 +607,7 @@
         refreshLvlLabel();
       }
       prefs.players = sv.players;
+      prefs.teams = teams;
       syncPlayersUI();
       savePrefs(); // commit the resumed game's setup as the remembered one
       started = true;
@@ -591,6 +627,7 @@
   if (!resumed) {
     board = startBoard(prefs.players);
     seats = SEATS[prefs.players].slice();
+    teams = prefs.teams && (prefs.players === 4 || prefs.players === 6);
     turnIdx = 0;
     buildBoard();
     setStatus("");
