@@ -1,14 +1,14 @@
 ---
 name: localstorage-schemas
-description: "Exact JSON shape and load-time validation of every localStorage key (snake-best, sockbot-record, chess/checkers/connect4 prefs+game, breakout-best, minesweeper-best, engine-eval)"
-metadata: 
+description: "Exact JSON shape and load-time validation of every localStorage key (snake-best, sockbot-record, chess/checkers/connect4/chinese-checkers prefs+game, breakout-best, minesweeper-best, engine-eval)"
+metadata:
   node_type: memory
   type: project
   originSessionId: 71baaf5d-5c78-4c8d-b9bc-18590770c633
-  modified: 2026-08-11T00:45:58.313Z
+  modified: 2026-08-16T00:00:00.000Z
 ---
 
-Exact value shapes of all localStorage keys (as of 2026-08-13). CLAUDE.md lists the key names; this records the shapes and the validation each game applies on load. `js/index.js` reads all of them to render card stats, so reshaping any key means updating it too.
+Exact value shapes of all localStorage keys (as of 2026-08-16). CLAUDE.md lists the key names; this records the shapes and the validation each game applies on load. `js/index.js` reads all of them to render card stats, so reshaping any key means updating it too.
 
 - `snake-best` / `breakout-best` — stringified integer (`String(best)`), read with `parseInt(x, 10) || 0`.
 - `minesweeper-best` (js/minesweeper.js ~line 73) — `{ easy: number, medium: number, hard: number }` seconds. Load keeps each field only if a positive number. Saved on a win when the time beats the stored best for that difficulty. index.js shows the best (min) time across all three.
@@ -19,6 +19,8 @@ Exact value shapes of all localStorage keys (as of 2026-08-13). CLAUDE.md lists 
 - `checkers-game` — `{ board: number[8][8], turn: 1|-1, clock: number, side: 1|-1, level: number, snapshots: [] }`. Board cells must each be in [-2,-1,0,1,2] (validated by `validBoard` at boot). Saved at stable points between moves. `snapshots` is the undo stack: one `{ bd, clock }` per **completed player move**, pushed by `finishPlayerMove` (from a board copy armed at the start of the player's turn, `pendingSnap` — reconstructed as the current board on boot and never persisted itself). Undo pops one snapshot to revert a whole exchange (your move + the engine's reply) and is repeatable back to the opening, mirroring chess. Like chess, it survives refresh because undo saves the reduced `board`/`snapshots`.
 - `connect4-prefs` — `{ level: number (0-9), side: 1|-1, random: boolean }` (RED=1 moves first, YEL=-1), default `{ level: 0, side: RED, random: false }`. Load also requires `LEVELS[level]` to exist. Same semantics as checkers-prefs; index.js displays `level + 1` as "Engine level N of 10".
 - `connect4-game` — `{ board: number[6][7], turn: 1|-1, side: 1|-1, level: number, snapshots: [] }`. Board cells must each be in [-1,0,1] (`validBoard` at boot, also applied to filter each snapshot). No clock — the only draw is a full board. `snapshots` is the undo stack: one plain board copy per completed player move (unlike checkers' `{ bd, clock }` wrappers); undo pops one to revert a whole exchange, exactly like checkers.
-- `engine-eval` (js/index.js ~line 48, plus each game's own setup overlay: `#eval-opt` in chess.html/checkers.html/connect4.html) — `"1"` or `"0"` (absent = off). "Show the engine's evaluation bar in Chess, Checkers & Connect Four". All four places read/write the same key, so they stay in sync; the bar appears when a game starts. Each game reads it at boot.
+- `chinese-checkers-prefs` — `{ level: number (0-9), players: 2|3|4|6 }`, default `{ level: 0, players: 2 }`. Load requires numeric `level` with `LEVELS[level]` existing and `SEATS[players]` existing. No side pick — the human is always player 1 (bottom corner) and moves first. index.js displays `level + 1` as "Engine level N of 10".
+- `chinese-checkers-game` — `{ board: number[121] (flat), turn: 1-6, players: 2|3|4|6, level: number, snapshots: [] }`. `validBoard` at boot requires 121 integer cells in 0-6 AND exact marble counts — 10 for every seated player id, 0 for unseated ones; `turn` must be a seated id. `snapshots` is the undo stack: one plain flat board copy per completed player move (connect4-style, filtered by the same `validBoard`); undo pops one to revert a whole round (your move + every robot's reply). Board cell order / player-id encoding are the engine's — see [[game-engine-internals]].
+- `engine-eval` (js/index.js ~line 48, plus each game's own setup overlay: `#eval-opt` in chess.html/checkers.html/connect4.html — chinese-checkers has no eval bar and ignores this key) — `"1"` or `"0"` (absent = off). "Show the engine's evaluation bar in Chess, Checkers & Connect Four". All four places read/write the same key, so they stay in sync; the bar appears when a game starts. Each game reads it at boot.
 
 All the board games wrap every access in try/catch (`/* private browsing */`) and fall through to the setup menu on a corrupted save. Board-cell encodings are detailed in [[game-engine-internals]].

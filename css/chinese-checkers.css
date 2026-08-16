@@ -1,0 +1,246 @@
+  :root {
+    --bg: #0f172a;
+    --panel: #1e293b;
+    --text: #f1f5f9;
+    --muted: #94a3b8;
+    --accent: #2dd4bf;
+    /* The board is taller than wide (aspect ≈ 0.874, set by JS from the hole
+       grid); the vh term keeps it (plus header, seat chips and controls)
+       inside short/wide windows, and on phones the vmin term still wins. */
+    --board: min(94vmin, 540px, calc((100vh - 216px) * 0.874));
+    --hole: calc(var(--board) * 0.0694); /* one hole's diameter */
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
+  }
+  body {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    height: 100vh;
+    height: 100dvh;
+    padding: max(10px, env(safe-area-inset-top))
+             max(10px, env(safe-area-inset-right))
+             max(10px, env(safe-area-inset-bottom))
+             max(10px, env(safe-area-inset-left));
+  }
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: var(--board);
+    gap: 10px;
+  }
+  header a { color: var(--muted); text-decoration: none; font-size: 14px; white-space: nowrap; }
+  #status { font-size: 15px; font-weight: 600; text-align: right; min-height: 1.2em; }
+  /* One chip per player: colour, name, marbles home. The side to move glows. */
+  #seats {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px;
+    width: var(--board);
+    min-height: 29px;
+  }
+  .chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    background: var(--panel);
+    border: 2px solid rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .chip .home { color: var(--muted); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .chip.turn { border-color: var(--accent); }
+  #wrap { position: relative; }
+  #board {
+    position: relative;
+    width: var(--board);
+    /* aspect-ratio comes inline from JS — the exact hole-grid proportions */
+    touch-action: none; /* board drags must reach pointermove, not the browser */
+  }
+  /* The star-shaped board face, clipped by JS to the true hexagram outline.
+     It's oversized (inset -8%) so the six tips reach past the hole grid. */
+  #star {
+    position: absolute;
+    inset: -8%;
+    background: radial-gradient(circle at 50% 42%, #263452, #1a2440 72%);
+    filter: drop-shadow(0 8px 24px rgba(0, 0, 0, 0.5));
+    z-index: 0;
+  }
+  .hole {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: rgba(2, 6, 18, 0.5);
+    box-shadow: inset 0 2px 3px rgba(0, 0, 0, 0.55), inset 0 -1px 0 rgba(255, 255, 255, 0.06);
+    z-index: 1;
+  }
+  /* Faint colour rings mark the six corner triangles — home and target */
+  .hole.h0 { box-shadow: inset 0 0 0 2px rgba(248, 113, 113, 0.4), inset 0 2px 3px rgba(0, 0, 0, 0.55); }
+  .hole.h1 { box-shadow: inset 0 0 0 2px rgba(251, 146, 60, 0.4), inset 0 2px 3px rgba(0, 0, 0, 0.55); }
+  .hole.h2 { box-shadow: inset 0 0 0 2px rgba(250, 204, 21, 0.4), inset 0 2px 3px rgba(0, 0, 0, 0.55); }
+  .hole.h3 { box-shadow: inset 0 0 0 2px rgba(74, 222, 128, 0.4), inset 0 2px 3px rgba(0, 0, 0, 0.55); }
+  .hole.h4 { box-shadow: inset 0 0 0 2px rgba(96, 165, 250, 0.45), inset 0 2px 3px rgba(0, 0, 0, 0.55); }
+  .hole.h5 { box-shadow: inset 0 0 0 2px rgba(192, 132, 252, 0.45), inset 0 2px 3px rgba(0, 0, 0, 0.55); }
+  .hole.last { box-shadow: inset 0 0 0 100vmax rgba(45, 212, 191, 0.28); }
+  .hole.can { box-shadow: inset 0 0 0 2px rgba(251, 191, 36, 0.85); }
+  .hole.sel { box-shadow: inset 0 0 0 100vmax rgba(59, 130, 246, 0.45); }
+  .hole.dot::after {
+    content: "";
+    position: absolute;
+    width: 44%;
+    height: 44%;
+    border-radius: 50%;
+    background: rgba(241, 245, 249, 0.35);
+  }
+  .pc {
+    width: 86%;
+    height: 86%;
+    border-radius: 50%;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.45), inset 0 -3px 0 rgba(0, 0, 0, 0.3), inset 0 2px 0 rgba(255, 255, 255, 0.2);
+  }
+  /* Marble colours, by home corner: bottom, lower-right, upper-right, top, upper-left, lower-left */
+  .pc.c0, .disc.c0 { background: radial-gradient(circle at 35% 30%, #f87171, #b91c1c 70%); }
+  .pc.c1, .disc.c1 { background: radial-gradient(circle at 35% 30%, #fdba74, #c2410c 70%); }
+  .pc.c2, .disc.c2 { background: radial-gradient(circle at 35% 30%, #fde047, #a16207 70%); }
+  .pc.c3, .disc.c3 { background: radial-gradient(circle at 35% 30%, #86efac, #15803d 70%); }
+  .pc.c4, .disc.c4 { background: radial-gradient(circle at 35% 30%, #93c5fd, #1d4ed8 70%); }
+  .pc.c5, .disc.c5 { background: radial-gradient(circle at 35% 30%, #d8b4fe, #7e22ce 70%); }
+  .disc {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+    box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.3), inset 0 2px 0 rgba(255, 255, 255, 0.18);
+  }
+  .drag-ghost {
+    position: absolute;
+    z-index: 4;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    transform: scale(1.12);
+    filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.5));
+    will-change: left, top;
+  }
+  .fly {
+    position: absolute;
+    z-index: 4;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    transition: transform 0.2s ease;
+    will-change: transform;
+  }
+  /* The computer's hand (js/shared/robot-hand.js): reaches down over the
+     marble, closes around it, carries it through every hop of the chain, then
+     opens again. It lives in #wrap rather than #board so reaching in from
+     above isn't clipped. */
+  .hand {
+    position: absolute;
+    z-index: 4;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.16s ease;
+    will-change: transform, opacity;
+  }
+  .hand.in { opacity: 1; }
+  .hand .held {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transform: scale(1.12); /* lifted off the board, like a dragged marble */
+    filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.5));
+  }
+  .hand .mitt {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    font-size: calc(var(--hole) * 1.35);
+    line-height: 1;
+    transform: translate(-50%, -92%) rotate(180deg); /* reaching down from above */
+    transition: transform 0.19s ease;
+    filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.5));
+  }
+  .hand.in .mitt { transform: translate(-50%, -62%) rotate(180deg); }
+  #controls { display: flex; gap: 10px; width: var(--board); }
+  button {
+    flex: 1;
+    padding: 12px;
+    border: 2px solid rgba(255, 255, 255, 0.14);
+    border-radius: 12px;
+    background: var(--panel);
+    color: var(--text);
+    font: 700 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  button:active { background: #34405f; }
+  button:disabled { opacity: 0.4; }
+  .winbanner {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    font-size: clamp(36px, 11vmin, 72px);
+    font-weight: 800;
+    color: #fbbf24;
+    text-shadow: 0 3px 12px rgba(0, 0, 0, 0.7);
+    z-index: 6;
+    pointer-events: none;
+    animation: pop 0.5s cubic-bezier(0.2, 2.2, 0.4, 1);
+  }
+  @keyframes pop { from { transform: scale(0.2); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  #overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    background: rgba(10, 12, 26, 0.88);
+    -webkit-backdrop-filter: blur(5px);
+    backdrop-filter: blur(5px);
+    border-radius: 8px;
+    padding: 20px;
+    text-align: center;
+    z-index: 5;
+  }
+  #overlay.hidden { display: none; }
+  #overlay h1 { font-size: 28px; font-weight: 800; }
+  #overlay .row { display: flex; gap: 10px; width: 100%; max-width: 320px; }
+  #overlay .row button.on { border-color: var(--accent); background: #1d3a38; }
+  #overlay label { color: var(--muted); font-size: 14px; }
+  #overlay input[type=range] { width: 100%; max-width: 320px; }
+  #lvl-label { font-size: 20px; font-weight: 800; color: var(--accent); }
+  #ov-msg { color: var(--muted); font-size: 15px; line-height: 1.5; }

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7035083353596708"
+     crossorigin="anonymous"></script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="Play Chinese Checkers for free in your browser. Race 2 to 6 players across the star, chain hops over marbles, and pick your AI strength. No download or sign-up needed.">
+<title>Chinese Checkers — Free Browser Game</title>
+<link rel="canonical" href="https://maguire.app/chinese-checkers.html">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Free Browser Games">
+<meta property="og:title" content="Chinese Checkers — Free Browser Game">
+<meta property="og:description" content="Play Chinese Checkers for free in your browser. Race 2 to 6 players across the star and chain hops over marbles.">
+<meta property="og:url" content="https://maguire.app/chinese-checkers.html">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Chinese Checkers — Free Browser Game">
+<meta name="twitter:description" content="Play Chinese Checkers for free in your browser.">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "VideoGame",
+  "name": "Chinese Checkers",
+  "url": "https://maguire.app/chinese-checkers.html",
+  "description": "Play Chinese Checkers for free in your browser. Race 2 to 6 players across the star and chain hops over marbles.",
+  "genre": "Strategy",
+  "playMode": "SinglePlayer",
+  "audience": { "@type": "PeopleAudience", "suitableForAge": "4+" },
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+}
+</script>
+<link rel="stylesheet" href="css/chinese-checkers.css">
+</head>
+<body>
+  <header>
+    <a href="index.html">← Games</a>
+    <div id="status"></div>
+  </header>
+  <div id="seats"></div>
+  <div id="wrap">
+    <div id="board"></div>
+    <div id="overlay">
+      <h1>⭐ Chinese Checkers</h1>
+      <div id="ov-msg">Race your marbles across the star — step to a neighbouring hole, or chain hops over any marbles. You can't stop inside another colour's triangle. First to fill the far triangle wins!</div>
+      <button id="btn-view" style="max-width:320px; width:100%" hidden>👀 View board</button>
+      <label>Players</label>
+      <div class="row">
+        <button id="pl-2" class="on">2</button>
+        <button id="pl-3">3</button>
+        <button id="pl-4">4</button>
+        <button id="pl-6">6</button>
+      </div>
+      <label for="lvl">Engine strength</label>
+      <input type="range" id="lvl" min="0" max="9" step="1" value="0">
+      <div id="lvl-label"></div>
+      <button id="start" style="max-width:320px; width:100%">Start Game</button>
+    </div>
+  </div>
+  <div id="controls">
+    <button id="btn-new">New Game</button>
+    <button id="btn-undo" disabled>Undo</button>
+  </div>
+
+<script src="js/shared/audio.js"></script>
+<script src="js/shared/celebrate.js"></script>
+<script src="js/shared/robot-hand.js"></script>
+<script src="js/shared/chinese-checkers-engine.js"></script>
+<script src="js/chinese-checkers.js"></script>
+</body>
+</html>

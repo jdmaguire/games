@@ -29,6 +29,7 @@ you are changing. Markup, styling, and logic are three separate reads now.
 | Breakout | `breakout.html` (~61) | `css/breakout.css` (77) | `js/breakout.js` (462) |
 | Minesweeper | `minesweeper.html` (~68) | `css/minesweeper.css` (120) | `js/minesweeper.js` (617) |
 | Connect Four | `connect4.html` (~92) | `css/connect4.css` (260) | `js/connect4.js` (596) |
+| Chinese Checkers | `chinese-checkers.html` (~75) | `css/chinese-checkers.css` (246) | `js/chinese-checkers.js` (598) |
 
 Shared, loaded by the pages that need them:
 
@@ -36,9 +37,10 @@ Shared, loaded by the pages that need them:
 | --- | --- | --- |
 | `js/shared/audio.js` | 58 | WebAudio synth: `window.GameAudio` = `{ ensureAudio, beep, thud }`. |
 | `js/shared/celebrate.js` | 74 | `window.GameCelebrate` = `{ showBanner, hideBanner, confetti }`. |
-| `js/shared/robot-hand.js` | 106 | `window.RobotHand` = `{ carry, clear }`. The computer's hand for chess & checkers: reaches down, closes on the piece, carries it through every hop of a move, sets it down. Loaded by `chess.html` and `checkers.html`. |
+| `js/shared/robot-hand.js` | 106 | `window.RobotHand` = `{ carry, clear }`. The computer's hand for chess, checkers & chinese checkers: reaches down, closes on the piece, carries it through every hop of a move, sets it down. Loaded by `chess.html`, `checkers.html` and `chinese-checkers.html`. |
 | `js/shared/checkers-engine.js` | 278 | Checkers rules + negamax + transposition table. Dual-purpose: loaded as a classic script (`window.CheckersEngine` = `{ RED, BLK, LEVELS, genMoves, applyMove, undoMove, sideOf, isMan, aiPickMove }`) and spawned as a Worker (`askEngine`). One TT shared by eval + AI search. |
 | `js/shared/connect4-engine.js` | 277 | Connect Four rules + negamax + transposition table. Same dual-purpose pattern: classic script (`window.Connect4Engine` = `{ RED, YEL, ROWS, COLS, LEVELS, genMoves, landingRow, applyMove, undoMove, isWinAt, winLine, aiPickMove }`) and Worker with the same `{ id, board, side, level, ms }` protocol. |
+| `js/shared/chinese-checkers-engine.js` | 389 | Chinese checkers board geometry (121-hole star) + rules + **max-n** search (2-6 players, so no negamax/alpha-beta) + transposition table. Same dual-purpose pattern: classic script (`window.ChineseCheckersEngine` = `{ CELLS, CORNER, TRI, SEATS, LEVELS, targetOf, startBoard, genMoves, applyMove, undoMove, isWin, aiPickMove }`) and Worker with the same `{ id, board, side, level, ms }` protocol. |
 
 Other: `readme.md` (player blurb), `robots.txt` + `sitemap.xml` (SEO, at repo root), `docs/token-notes.md` (what this repo costs to work in
 and what is still worth splitting), `docs/claude-settings.json` (copy-in settings),
@@ -47,10 +49,11 @@ and what is still worth splitting), `docs/claude-settings.json` (copy-in setting
 ## Cached codebase facts — `docs/memory/`
 
 `docs/memory/` holds facts that are expensive to re-derive from the code but too detailed
-for this file: exact `GameAudio`/`GameCelebrate`/`CheckersEngine`/`Connect4Engine`
-signatures, the JSON shape and load validation of every `localStorage` key, and the
-chess/checkers/connect-four engine internals (Elo-weakening scheme, `LEVELS` tables, board
-encodings). `docs/memory/MEMORY.md` is the index.
+for this file: exact `GameAudio`/`GameCelebrate`/`CheckersEngine`/`Connect4Engine`/
+`ChineseCheckersEngine` signatures, the JSON shape and load validation of every
+`localStorage` key, and the chess/checkers/connect-four/chinese-checkers engine internals
+(Elo-weakening scheme, `LEVELS` tables, board encodings). `docs/memory/MEMORY.md` is the
+index.
 
 **Check these files before grepping or reading source for anything they cover.** And keep
 them true: any change to code they describe — a shared-module signature, a storage key's
@@ -133,6 +136,18 @@ somewhere around 18k tokens; a single section costs a few hundred. See
   columns as if undecided, then glides to its choice and opens. `obviousMove()`
   skips all of that when someone is one disc from four in a row — no wavering, no
   minimum think, and the engine gets a 400ms budget, since the reply is forced.
+- **`js/chinese-checkers.js`** — Preferences · Audio · Win celebration · Engine
+  worker · Game state · Board layout & rendering · Seat chips · Move animation ·
+  Player input · Drag to move · Turn flow · Game end / flow · Setup UI · Boot.
+  Geometry + rules + the max-n search live in
+  `js/shared/chinese-checkers-engine.js` (run as a Worker, same file:// sync
+  fallback as checkers). The human always plays the bottom corner and moves
+  first; 1-5 AI opponents take the other corners (2/3/4/6 players). The board is
+  121 absolutely-positioned hole divs laid out from cube coordinates, with a
+  clip-path star face behind them; hit-testing is nearest-hole, so small holes
+  still tap well. Hop chains are picked by destination (no mid-jump state); the
+  player's marble flies hop by hop, the AI's is carried by the shared robot
+  hand. No eval bar — a per-player score vector has no one number to show.
 
 ## Conventions
 
@@ -155,7 +170,8 @@ somewhere around 18k tokens; a single section costs a few hundred. See
 - **`localStorage` is always wrapped in `try/catch`** (`/* private browsing */`). Keys in
   use: `snake-best`, `sockbot-record`, `chess-prefs`, `chess-game`, `checkers-prefs`,
   `checkers-game`, `breakout-best`, `minesweeper-best`, `connect4-prefs`, `connect4-game`,
-  `engine-eval`. `js/index.js` reads all of them to render card stats — if you rename or
+  `chinese-checkers-prefs`, `chinese-checkers-game`, `engine-eval`.
+  `js/index.js` reads all of them to render card stats — if you rename or
   reshape a key, update it too.
 - **Canvas games** scale by `devicePixelRatio` and derive sizes from a single scale unit
   (e.g. `js/robot.js`'s `S()`), so nothing is hard-coded in pixels.
@@ -168,10 +184,10 @@ There is nothing to run — no tests, no build, no lint. So:
 2. Syntax-check standalone JS with `node --check js/<file>.js`.
 3. To try it by hand, serve over HTTP — `python3 -m http.server` from the repo root, then
    open <http://localhost:8000>. **`file://` will not work for chess**: the Stockfish
-   Web Worker and the `chess-1.4.0.mjs` module import are both blocked there. Checkers
-   and Connect Four survive `file://` by degrading to a synchronous search on the main
-   thread, but only the real Worker path exercises the transposition-table sharing this
-   repo is about.
+   Web Worker and the `chess-1.4.0.mjs` module import are both blocked there. Checkers,
+   Connect Four and Chinese Checkers survive `file://` by degrading to a synchronous
+   search on the main thread, but only the real Worker path exercises the
+   transposition-table sharing this repo is about.
 4. State in the PR description what you could not verify. Do not claim a game was tested
    when it was not.
 

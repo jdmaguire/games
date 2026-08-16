@@ -35,6 +35,12 @@
     }
   } catch (e) { /* private browsing */ }
   try {
+    const p = JSON.parse(localStorage.getItem("chinese-checkers-prefs"));
+    if (p && typeof p.level === "number") {
+      document.getElementById("chinese-stat").textContent = "Engine level " + (p.level + 1) + " of 10";
+    }
+  } catch (e) { /* private browsing */ }
+  try {
     const b = JSON.parse(localStorage.getItem("minesweeper-best"));
     let best = Infinity;
     if (b) for (const k of ["easy", "medium", "hard"]) {
@@ -51,7 +57,7 @@
   });
 
   // Quick keyboard select on desktop
-  const KEYS = { 1: "snake.html", 2: "robot.html", 3: "chess.html", 4: "checkers.html", 5: "breakout.html", 6: "minesweeper.html", 7: "connect4.html" };
+  const KEYS = { 1: "snake.html", 2: "robot.html", 3: "chess.html", 4: "checkers.html", 5: "breakout.html", 6: "minesweeper.html", 7: "connect4.html", 8: "chinese-checkers.html" };
   window.addEventListener("keydown", (e) => {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     if (KEYS[e.key]) window.location.href = KEYS[e.key];
